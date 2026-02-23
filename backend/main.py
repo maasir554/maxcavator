@@ -22,14 +22,25 @@ app.add_middleware(
 def read_root():
     return {"status": "ok", "message": "Maxcavator Backend Running"}
 
-from models import ExtractionRequest, ExtractionResponse, SqlQueryRequest, SqlQueryResponse
-from extraction import extract_tables_from_text, generate_sql_query
+from models import ExtractionRequest, ExtractionResponse, SqlQueryRequest, SqlQueryResponse, PdfSummaryRequest, PdfSummaryResponse, EmbedRequest, EmbedResponse
+from extraction import extract_tables_from_text, generate_sql_query, extract_pdf_summary
 from vision_ocr import extract_text_from_image
+from embeddings import generate_embeddings
 
 @app.post("/extract", response_model=ExtractionResponse)
 def extract_tables(request: ExtractionRequest):
     tables, debug_info = extract_tables_from_text(request.text)
     return ExtractionResponse(tables=tables, debug_info=debug_info)
+
+@app.post("/pdf_summary", response_model=PdfSummaryResponse)
+def pdf_summary(request: PdfSummaryRequest):
+    result = extract_pdf_summary(request.page_texts)
+    return PdfSummaryResponse(title=result["title"], summary=result["summary"])
+
+@app.post("/embed", response_model=EmbedResponse)
+def embed_texts(request: EmbedRequest):
+    vectors = generate_embeddings(request.texts)
+    return EmbedResponse(embeddings=vectors)
 
 class VisionOcrRequest(BaseModel):
     image: str  # base64-encoded image
@@ -47,16 +58,6 @@ def vision_ocr(request: VisionOcrRequest):
 def query_sql(request: SqlQueryRequest):
     sql = generate_sql_query(request.user_query, request.table_schema)
     return SqlQueryResponse(sql=sql)
-
-class EmbedRequest(BaseModel):
-    text: str
-
-class EmbedResponse(BaseModel):
-    embedding: List[float]
-
-@app.post("/embed", response_model=EmbedResponse)
-def embed_text(request: EmbedRequest):
-    return EmbedResponse(embedding=[0.0] * 384)
 
 from fastapi import Response
 import requests

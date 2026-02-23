@@ -1,19 +1,28 @@
 const API_URL = "http://localhost:8000";
 
-export interface TableSchema {
+export interface FieldSchema {
     name: string;
     type: string;
+    description: string;
 }
 
-export interface TableData {
+export interface ChunkData {
+    data: Record<string, any>;
+    text_summary: string;
+    summary_embedding?: number[];
+}
+
+export interface TableExtraction {
     table_name: string;
-    description: string;
-    schema_list: TableSchema[];
-    rows: any[];
+    summary: string;
+    notes: string;
+    schema_fields: FieldSchema[];
+    chunks: ChunkData[];
+    summary_embedding?: number[];
 }
 
 export const apiService = {
-    async extractTables(text: string): Promise<{ tables: TableData[], debug_info?: any }> {
+    async extractTables(text: string): Promise<{ tables: TableExtraction[], debug_info?: any }> {
         const res = await fetch(`${API_URL}/extract`, {
             method: "POST",
             headers: { "Content-Type": "application/json" },
@@ -43,5 +52,26 @@ export const apiService = {
         });
         if (!res.ok) throw new Error("Vision OCR failed");
         return await res.json();
+    },
+
+    async extractPdfSummary(pageTexts: string[]): Promise<{ title: string, summary: string }> {
+        const res = await fetch(`${API_URL}/pdf_summary`, {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ page_texts: pageTexts }),
+        });
+        if (!res.ok) throw new Error("PDF Summary extraction failed");
+        return await res.json();
+    },
+
+    async generateEmbeddings(texts: string[]): Promise<number[][]> {
+        const res = await fetch(`${API_URL}/embed`, {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ texts }),
+        });
+        if (!res.ok) throw new Error("Embedding generation failed");
+        const data = await res.json();
+        return data.embeddings;
     }
 };

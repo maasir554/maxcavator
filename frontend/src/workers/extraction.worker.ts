@@ -72,11 +72,14 @@ const api = {
 
         // Use disableFontFace to force canvas rendering and avoid font loading issues
         const standardFontDataUrl = `${self.location.origin}/standard_fonts/`;
+        const cMapUrl = `${self.location.origin}/cmaps/`;
 
         const pdf = await pdfjsLib.getDocument({
             data: arrayBuffer,
             canvasFactory: new OffscreenCanvasFactory(),
             standardFontDataUrl,
+            cMapUrl,
+            cMapPacked: true,
             disableFontFace: true
         } as any).promise;
 
@@ -135,11 +138,14 @@ const api = {
     async testPage(file: File, pageNum: number) {
         const arrayBuffer = await file.arrayBuffer();
         const standardFontDataUrl = `${self.location.origin}/standard_fonts/`;
+        const cMapUrl = `${self.location.origin}/cmaps/`;
 
         const pdf = await pdfjsLib.getDocument({
             data: arrayBuffer,
             canvasFactory: new OffscreenCanvasFactory(),
             standardFontDataUrl,
+            cMapUrl,
+            cMapPacked: true,
             disableFontFace: true
         } as any).promise;
 
@@ -172,11 +178,14 @@ const api = {
     async renderPage(file: File, pageNum: number) {
         const arrayBuffer = await file.arrayBuffer();
         const standardFontDataUrl = `${self.location.origin}/standard_fonts/`;
+        const cMapUrl = `${self.location.origin}/cmaps/`;
 
         const pdf = await pdfjsLib.getDocument({
             data: arrayBuffer,
             canvasFactory: new OffscreenCanvasFactory(),
             standardFontDataUrl,
+            cMapUrl,
+            cMapPacked: true,
             disableFontFace: true
         } as any).promise;
 
@@ -203,11 +212,14 @@ const api = {
     async extractPdfText(file: File, pageNum: number) {
         const arrayBuffer = await file.arrayBuffer();
         const standardFontDataUrl = `${self.location.origin}/standard_fonts/`;
+        const cMapUrl = `${self.location.origin}/cmaps/`;
 
         const pdf = await pdfjsLib.getDocument({
             data: arrayBuffer,
             canvasFactory: new OffscreenCanvasFactory(),
             standardFontDataUrl,
+            cMapUrl,
+            cMapPacked: true,
             disableFontFace: true
         } as any).promise;
 

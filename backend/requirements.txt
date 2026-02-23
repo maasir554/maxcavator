@@ -4,3 +4,4 @@ python-dotenv
 groq
 pydantic
 requests
+google-genai

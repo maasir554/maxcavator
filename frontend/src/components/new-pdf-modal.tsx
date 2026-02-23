@@ -7,7 +7,7 @@ import { Input } from "@/components/ui/input"
 import { UploadCloud, Link as LinkIcon, Loader2, FilePlus } from 'lucide-react'
 import { useExtractionStore } from '@/store/extraction-store'
 
-export function NewPdfModal() {
+export function NewPdfModal({ collapsed = false }: { collapsed?: boolean }) {
     const [isOpen, setIsOpen] = useState(false)
     const [url, setUrl] = useState("")
     const [customName, setCustomName] = useState("")
@@ -53,10 +53,16 @@ export function NewPdfModal() {
     return (
         <Dialog open={isOpen} onOpenChange={setIsOpen}>
             <DialogTrigger asChild>
-                <Button className="w-full gap-2">
-                    <FilePlus className="h-4 w-4" />
-                    New PDF
-                </Button>
+                {collapsed ? (
+                    <Button size="icon" variant="ghost" className="w-9 h-9" title="New PDF">
+                        <FilePlus className="h-4 w-4" />
+                    </Button>
+                ) : (
+                    <Button className="w-full gap-2">
+                        <FilePlus className="h-4 w-4" />
+                        New PDF
+                    </Button>
+                )}
             </DialogTrigger>
             <DialogContent className="sm:max-w-[500px]">
                 <DialogHeader>

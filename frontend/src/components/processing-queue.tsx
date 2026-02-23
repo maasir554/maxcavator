@@ -1,5 +1,6 @@
 import { ExtractionDebugModal } from "@/components/extraction-debug-modal"
 import { PdfInspectionModal } from "@/components/pdf-inspection-modal"
+import { DeleteConfirmModal } from "@/components/delete-confirm-modal"
 import { useExtractionStore } from '@/store/extraction-store';
 import { Progress } from "@/components/ui/progress"
 import { ScrollArea } from "@/components/ui/scroll-area"
@@ -14,7 +15,7 @@ const truncateFilename = (filename: string, maxLength: number = 30) => {
     return filename.slice(0, nameLength) + '...' + ext;
 };
 
-export function ProcessingQueue() {
+export function ProcessingQueue({ highlightedJobId }: { highlightedJobId?: string | null }) {
     const jobs = useExtractionStore((state) => state.jobs);
     const pauseJob = useExtractionStore((state) => state.pauseJob);
     const resumeJob = useExtractionStore((state) => state.resumeJob);
@@ -37,10 +38,12 @@ export function ProcessingQueue() {
 
     return (
         <ScrollArea className="h-full">
-            <div className="space-y-4 p-4">
-                <h3 className="font-semibold text-sm">Processing Queue</h3>
+            <div className="space-y-3 p-3">
                 {activeJobs.map((job) => (
-                    <div key={job.documentId} className="border rounded-lg p-3 space-y-3 bg-card">
+                    <div
+                        key={job.documentId}
+                        className={`border rounded-lg p-3 space-y-3 bg-card transition-all duration-700 ${highlightedJobId === job.documentId ? 'ring-2 ring-primary/50 shadow-md' : ''}`}
+                    >
                         <div className="flex items-start justify-between">
                             <div className="flex items-center space-x-2 overflow-hidden">
                                 <FileText className="h-4 w-4 shrink-0 text-muted-foreground" />
@@ -48,13 +51,14 @@ export function ProcessingQueue() {
                                     {truncateFilename(job.filename)}
                                 </span>
                             </div>
-                            <div className="flex items-center gap-2">
+                            <div className="flex items-center gap-1">
                                 {job.debugInfo && (
                                     <ExtractionDebugModal
                                         debugInfo={job.debugInfo}
                                         maxPage={job.processedPages}
                                     />
                                 )}
+                                <DeleteConfirmModal documentId={job.documentId} filename={job.filename} />
                                 {getIcon(job.status)}
                             </div>
                         </div>
@@ -67,16 +71,21 @@ export function ProcessingQueue() {
                             <Progress value={(job.processedPages / (job.totalPages || 1)) * 100} className="h-2" />
                         </div>
 
-                        <div className="flex justify-end gap-2 mt-2">
-                            <PdfInspectionModal docId={job.documentId} file={job.file!} />
+                        <div className="flex flex-wrap justify-end gap-1.5 mt-2">
+                            {job.file && (
+                                <PdfInspectionModal docId={job.documentId} file={job.file} />
+                            )}
 
-                            {(job.status === 'queued' || job.status === 'paused' || job.status === 'error') && (
-                                <Button size="sm" onClick={() => startJob(job.documentId)} className="gap-2">
-                                    <Play className="h-3 w-3" /> {job.status === 'paused' ? "Resume" : "Start Extraction"}
+                            {(job.status === 'queued' || job.status === 'paused' || job.status === 'error') && job.file && (
+                                <Button size="sm" onClick={() => startJob(job.documentId)} className="gap-1.5 text-xs h-7">
+                                    <Play className="h-3 w-3" /> {job.status === 'paused' ? "Resume" : "Extract"}
                                 </Button>
                             )}
+                            {(job.status === 'queued' || job.status === 'paused' || job.status === 'error') && !job.file && (
+                                <span className="text-xs text-muted-foreground italic">PDF file missing</span>
+                            )}
                             {job.status === 'processing' && (
-                                <Button size="sm" variant="outline" onClick={() => pauseJob(job.documentId)}>Pause</Button>
+                                <Button size="sm" variant="outline" className="text-xs h-7" onClick={() => pauseJob(job.documentId)}>Pause</Button>
                             )}
                         </div>
                     </div>

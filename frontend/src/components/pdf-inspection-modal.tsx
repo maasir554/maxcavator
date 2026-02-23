@@ -5,6 +5,8 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
 import { ScrollArea } from "@/components/ui/scroll-area"
 import { Loader2, ChevronLeft, ChevronRight, FileText, Bot, Eye, ScanEye, Play, Code, BookOpen } from "lucide-react"
 import { useExtractionStore } from "@/store/extraction-store"
+import { renderPdfPageMainThread } from "@/services/pdf-renderer"
+import { apiService } from "@/services/api-service"
 import ReactMarkdown from 'react-markdown'
 import remarkGfm from 'remark-gfm'
 
@@ -17,7 +19,6 @@ export function PdfInspectionModal({ docId }: PdfInspectionModalProps) {
     const [isOpen, setIsOpen] = useState(false);
     const [currentPage, setCurrentPage] = useState(1);
     const [pageInput, setPageInput] = useState("1");
-    const [loading, setLoading] = useState(false);
     const [ocrLoading, setOcrLoading] = useState(false);
     const [ocrViewMode, setOcrViewMode] = useState<'raw' | 'markdown'>('raw');
 
@@ -28,10 +29,9 @@ export function PdfInspectionModal({ docId }: PdfInspectionModalProps) {
     const [aiResult, setAiResult] = useState<string>("");
     const [aiLoading, setAiLoading] = useState(false);
 
-    const testPage = useExtractionStore(state => state.testPage);
-    const renderPage = useExtractionStore(state => state.renderPage);
     const extractPdfText = useExtractionStore(state => state.extractPdfText);
     const testAi = useExtractionStore(state => state.testAi);
+    const jobs = useExtractionStore(state => state.jobs);
 
     // Auto-load page image when opening or changing pages
     useEffect(() => {
@@ -43,10 +43,12 @@ export function PdfInspectionModal({ docId }: PdfInspectionModalProps) {
         setPdfText("");
         setAiResult("");
 
-        // Auto-load page image (without OCR)
+        // Auto-load page image using main-thread renderer (supports embedded fonts)
         const loadPageImage = async () => {
             try {
-                const { imageBlob } = await renderPage(docId, currentPage);
+                const job = jobs[docId];
+                if (!job?.file) return;
+                const { imageBlob } = await renderPdfPageMainThread(job.file, currentPage);
                 const url = URL.createObjectURL(imageBlob);
                 setPageImage(url);
             } catch (e) {
@@ -55,7 +57,7 @@ export function PdfInspectionModal({ docId }: PdfInspectionModalProps) {
         };
 
         loadPageImage();
-    }, [isOpen, currentPage, docId, renderPage]);
+    }, [isOpen, currentPage, docId, jobs]);
 
     // Sync page input with current page
     useEffect(() => {
@@ -65,15 +67,31 @@ export function PdfInspectionModal({ docId }: PdfInspectionModalProps) {
     const handleRunOcr = async () => {
         setOcrLoading(true);
         try {
-            const { text, imageBlob } = await testPage(docId, currentPage);
-            setOcrText(text);
-            // Update image only if not already loaded
+            const job = jobs[docId];
+            if (!job?.file) throw new Error("PDF file not found");
+
+            // Render on main thread (proper font support)
+            const { imageBlob } = await renderPdfPageMainThread(job.file, currentPage);
+
+            // Update page image if not loaded yet
             if (!pageImage) {
                 const url = URL.createObjectURL(imageBlob);
                 setPageImage(url);
             }
+
+            // Convert to base64 and send to Vision OCR API
+            const base64 = await new Promise<string>((resolve, reject) => {
+                const reader = new FileReader();
+                reader.onloadend = () => resolve((reader.result as string).split(',')[1]);
+                reader.onerror = reject;
+                reader.readAsDataURL(imageBlob);
+            });
+
+            const { text } = await apiService.visionOcr(base64);
+            setOcrText(text);
         } catch (e) {
             console.error("Test page failed", e);
+            setOcrText("Error: " + (e as Error).message);
         } finally {
             setOcrLoading(false);
         }
@@ -141,7 +159,7 @@ export function PdfInspectionModal({ docId }: PdfInspectionModalProps) {
                             <Button
                                 variant="outline" size="icon" className="h-8 w-8"
                                 onClick={() => setCurrentPage(Math.max(1, currentPage - 1))}
-                                disabled={currentPage <= 1 || loading}
+                                disabled={currentPage <= 1 || ocrLoading}
                             >
                                 <ChevronLeft className="h-4 w-4" />
                             </Button>
@@ -157,7 +175,7 @@ export function PdfInspectionModal({ docId }: PdfInspectionModalProps) {
                             <Button
                                 variant="outline" size="icon" className="h-8 w-8"
                                 onClick={() => setCurrentPage(currentPage + 1)}
-                                disabled={loading}
+                                disabled={ocrLoading}
                             >
                                 <ChevronRight className="h-4 w-4" />
                             </Button>
@@ -177,7 +195,7 @@ export function PdfInspectionModal({ docId }: PdfInspectionModalProps) {
                             </span>
                         </div>
                         <div className="flex-1 relative overflow-auto bg-zinc-100 dark:bg-zinc-900 p-4">
-                            {loading ? (
+                            {!pageImage && ocrLoading ? (
                                 <div className="w-full h-full flex items-center justify-center">
                                     <Loader2 className="h-8 w-8 animate-spin text-muted-foreground" />
                                 </div>

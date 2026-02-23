@@ -3,10 +3,20 @@ import base64
 from groq import Groq
 from typing import Dict
 
-# Initialize Groq client
-client = Groq(
-    api_key=os.environ.get("GROQ_API_KEY"),
-)
+# Initialize multiple Groq clients for load distribution
+clients = []
+key_index = 0
+
+for i in range(7):
+    cur_key = os.environ.get(f"GROQ_API_KEY_{i+1}")
+    clients.append(Groq(api_key=cur_key))
+
+def get_next_client():
+    """Get next client using round-robin distribution"""
+    global key_index
+    client = clients[key_index % 7]
+    key_index += 1
+    return client
 
 VISION_OCR_PROMPT = """Extract all text content from this image. Pay special attention to:
 1. Preserve the exact text as it appears
@@ -30,7 +40,7 @@ def extract_text_from_image(base64_image: str) -> Dict[str, str]:
         # Construct the image URL for Groq API
         image_url = f"data:image/png;base64,{base64_image}"
         
-        completion = client.chat.completions.create(
+        completion = get_next_client().chat.completions.create(
             model="meta-llama/llama-4-scout-17b-16e-instruct",
             messages=[
                 {

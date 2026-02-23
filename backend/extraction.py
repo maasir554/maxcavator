@@ -1,31 +1,77 @@
 import os
 import json
 from groq import Groq
-from models import TableData
-from typing import List
+from models import TableExtraction
+from typing import List, Tuple, Dict
 
-# Initialize Groq client
-client = Groq(
-    api_key=os.environ.get("GROQ_API_KEY"),
-)
+# Initialize multiple Groq clients for load distribution
+# round-robin load distribution scheme
+clients = []
+key_index = 0
+
+for i in range(7):
+    cur_key = os.environ.get(f"GROQ_API_KEY_{i+1}")
+    clients.append(Groq(api_key=cur_key))
+
+def get_next_client():
+    """Get next client using round-robin distribution"""
+    global key_index
+    client = clients[key_index % 7]
+    key_index += 1
+    return client
 
 TABLE_EXTRACTION_PROMPT = """
 You are a data extraction engine. Analyze the following OCR text from a document page.
-1. Identify if there are any tables.
-2. For each table, extract the data into a JSON structure.
-3. Create a unique, snake_case SQL table name based on the content (e.g., 'balance_sheet_2023').
-4. infer the data type for each column (TEXT, NUMERIC, DATE).
+
+1. Identify ALL tables, lists, or structured data in the text.
+2. For each table, extract EVERY row as an individual "chunk" — a self-contained JSON record.
+3. Provide a schema describing each field's name, data type, and a brief description.
+4. Write a concise summary of what the table represents.
+5. Add any relevant notes (e.g., currency, units, data quality caveats).
+6. For each chunk, write a one-line natural language summary of that specific entry.
 
 Output Format (JSON only):
 {
   "tables": [
     {
-      "table_name": "string",
-      "description": "string summary of table",
-      "schema_list": [{"name": "col_name", "type": "TEXT|NUMERIC"}],
-      "rows": [{"col_name": "value"}]
+      "table_name": "snake_case_name",
+      "summary": "Brief description of what this table contains",
+      "notes": "Any relevant context, units, caveats",
+      "schema_fields": [
+        {
+          "name": "field_name",
+          "type": "TEXT|NUMERIC|DATE|BOOLEAN",
+          "description": "What this field represents"
+        }
+      ],
+      "chunks": [
+        {
+          "data": {"field_name": "value", ...},
+          "text_summary": "One-line natural language summary of this entry"
+        }
+      ]
     }
   ]
+}
+
+RULES:
+- Every row in the original table must become exactly one chunk.
+- The "data" object keys must match the "schema_fields" field names exactly.
+- The "text_summary" should be a readable sentence, not just key-value pairs.
+- Use snake_case for table_name and field names.
+- Infer data types: use NUMERIC for numbers, DATE for dates, BOOLEAN for yes/no, TEXT for everything else.
+- If NO tables are found, return {"tables": []}.
+"""
+
+PDF_SUMMARY_PROMPT = """
+You are a document analysis assistant. Given the text from the first pages of a PDF document, provide:
+1. A concise, descriptive title for the document (not a filename — a proper human-readable title).
+2. A brief summary (2-3 sentences) describing what the document is about.
+
+Output Format (JSON only):
+{
+  "title": "Human-readable document title",
+  "summary": "2-3 sentence summary of the document's content and purpose."
 }
 """
 
@@ -38,15 +84,13 @@ Write a SINGLE SQL query to answer this. Do not use Markdown. Do not explain. Ju
 """
 
 
-from typing import List, Tuple, Dict
-
-def extract_tables_from_text(text: str) -> Tuple[List[TableData], Dict[str, str]]:
+def extract_tables_from_text(text: str) -> Tuple[List[TableExtraction], Dict[str, str]]:
     messages = [
-        {"role": "system", "content": TABLE_EXTRACTION_PROMPT + "\n\nCRITICAL: You must return a valid JSON object with a 'tables' key containing the list of tables."},
+        {"role": "system", "content": TABLE_EXTRACTION_PROMPT + "\n\nCRITICAL: You must return a valid JSON object with a 'tables' key."},
         {"role": "user", "content": text}
     ]
     
-    completion = client.chat.completions.create(
+    completion = get_next_client().chat.completions.create(
         model="openai/gpt-oss-120b",
         messages=messages,
         temperature=0,
@@ -61,21 +105,46 @@ def extract_tables_from_text(text: str) -> Tuple[List[TableData], Dict[str, str]
     }
 
     try:
-        # Wrap in expected structure if model returns raw array
         data = json.loads(content)
         if isinstance(data, list):
-            return [TableData(**item) for item in data], debug_info
+            return [TableExtraction(**item) for item in data], debug_info
         if "tables" in data:
-            return [TableData(**item) for item in data["tables"]], debug_info
-        return [], debug_info # Empty if structure unknown
+            return [TableExtraction(**item) for item in data["tables"]], debug_info
+        return [], debug_info
     except Exception as e:
         print(f"Error parsing AI response: {e}")
         return [], debug_info
 
+
+def extract_pdf_summary(page_texts: list[str]) -> dict:
+    """Extract title and summary from first pages of a PDF."""
+    combined = "\n\n---PAGE BREAK---\n\n".join(page_texts)
+    
+    messages = [
+        {"role": "system", "content": PDF_SUMMARY_PROMPT + "\n\nCRITICAL: Return valid JSON only."},
+        {"role": "user", "content": combined}
+    ]
+    
+    completion = get_next_client().chat.completions.create(
+        model="openai/gpt-oss-120b",
+        messages=messages,
+        temperature=0,
+        response_format={"type": "json_object"}
+    )
+    
+    content = completion.choices[0].message.content
+    try:
+        data = json.loads(content)
+        return {"title": data.get("title", ""), "summary": data.get("summary", "")}
+    except Exception as e:
+        print(f"Error parsing PDF summary: {e}")
+        return {"title": "", "summary": ""}
+
+
 def generate_sql_query(user_query: str, table_schema: dict) -> str:
     prompt = SQL_GENERATION_PROMPT.format(user_query=user_query, table_schema_json=json.dumps(table_schema))
     
-    completion = client.chat.completions.create(
+    completion = get_next_client().chat.completions.create(
         model="openai/gpt-oss-120b",
         messages=[
             {"role": "system", "content": "You are a SQL expert."},
@@ -85,6 +154,5 @@ def generate_sql_query(user_query: str, table_schema: dict) -> str:
     )
     
     sql = completion.choices[0].message.content.strip()
-    # Cleanup markdown code blocks if present
     sql = sql.replace("```sql", "").replace("```", "").strip()
     return sql
