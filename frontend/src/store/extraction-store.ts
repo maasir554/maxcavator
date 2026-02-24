@@ -14,6 +14,7 @@ export interface ExtractionJob {
     error?: string;
     file?: File;
     debugInfo?: Record<number, { ocrText: string, prompt: string, rawResponse: string }>;
+    dismissed_from_queue?: boolean;
 }
 
 export interface TrashedJob {
@@ -31,6 +32,7 @@ interface ExtractionState {
     jobs: Record<string, ExtractionJob>;
     trashedJobs: Record<string, TrashedJob>;
     trashAutoDeleteHours: number;
+    totalTables: number;
     isLoading: boolean;
     loadJobs: () => Promise<void>;
     addJob: (file: File, sourceUrl?: string) => Promise<void>;
@@ -39,6 +41,7 @@ interface ExtractionState {
     updateJob: (id: string, updates: Partial<ExtractionJob>) => void;
     pauseJob: (id: string) => void;
     resumeJob: (id: string) => void;
+    dismissJob: (id: string) => Promise<void>;
     trashJob: (id: string) => Promise<void>;
     restoreJob: (id: string) => Promise<void>;
     permanentlyDeleteJob: (id: string) => Promise<void>;
@@ -55,6 +58,7 @@ export const useExtractionStore = create<ExtractionState>((set, get) => ({
     jobs: {},
     trashedJobs: {},
     trashAutoDeleteHours: parseInt(localStorage.getItem(TRASH_DURATION_KEY) || '5', 10),
+    totalTables: 0,
     isLoading: true,
 
     loadJobs: async () => {
@@ -85,6 +89,7 @@ export const useExtractionStore = create<ExtractionState>((set, get) => ({
                     totalPages: doc.total_pages,
                     processedPages: doc.processed_pages,
                     file: file ?? undefined,
+                    dismissed_from_queue: doc.dismissed_from_queue || false,
                 };
             }
 
@@ -102,7 +107,10 @@ export const useExtractionStore = create<ExtractionState>((set, get) => ({
                 };
             }
 
-            set({ jobs, trashedJobs, isLoading: false });
+            // Fetch total table count
+            const totalTables = await dbService.getTotalTableCount();
+
+            set({ jobs, trashedJobs, totalTables, isLoading: false });
         } catch (e) {
             console.error('Failed to load jobs from database:', e);
             set({ isLoading: false });
@@ -213,6 +221,20 @@ export const useExtractionStore = create<ExtractionState>((set, get) => ({
         }
     },
 
+    dismissJob: async (id) => {
+        await dbService.dismissDocument(id);
+        set((state) => {
+            const job = state.jobs[id];
+            if (!job) return state;
+            return {
+                jobs: {
+                    ...state.jobs,
+                    [id]: { ...job, dismissed_from_queue: true }
+                }
+            };
+        });
+    },
+
     trashJob: async (id) => {
         await dbService.softDeleteDocument(id);
         const job = get().jobs[id];
@@ -295,6 +317,9 @@ export const useExtractionStore = create<ExtractionState>((set, get) => ({
             const totalPages = await getPdfPageCount(file);
             updateJob(docId, { totalPages });
 
+            // Save totalPages to DB immediately so it persists on reload
+            dbService.updateDocumentStatus(docId, 'processing', startPage - 1, totalPages);
+
             const firstPagesText: string[] = [];
 
             for (let i = startPage; i <= totalPages; i++) {
@@ -324,13 +349,25 @@ export const useExtractionStore = create<ExtractionState>((set, get) => ({
                     firstPagesText.push(text);
                 }
 
-                // If we have text from first 2 pages (or it's a 1-page doc), generate summary
                 if (firstPagesText.length > 0 && (i === 2 || i === totalPages)) {
                     try {
                         console.log("Generating PDF summary from first pages...");
                         const { title, summary } = await apiService.extractPdfSummary(firstPagesText);
+
+                        const documentName = title || file.name;
+                        let nameEmbedding: number[] | undefined;
+
+                        try {
+                            const embeddings = await apiService.generateEmbeddings([documentName]);
+                            if (embeddings && embeddings.length > 0) {
+                                nameEmbedding = embeddings[0];
+                            }
+                        } catch (e) {
+                            console.error("Failed to generate embedding for document name:", e);
+                        }
+
                         // Update document in DB with title (filename) and summary
-                        await dbService.updateDocumentTitleAndSummary(docId, title || file.name, summary);
+                        await dbService.updateDocumentTitleAndSummary(docId, documentName, summary, nameEmbedding);
                         // Only generate once
                         firstPagesText.length = 0;
                     } catch (e) {
@@ -341,7 +378,22 @@ export const useExtractionStore = create<ExtractionState>((set, get) => ({
                 // 4. AI Extraction
                 if (text) {
                     try {
-                        const { tables, debug_info } = await apiService.extractTables(text);
+                        let previousTablesParams = undefined;
+                        if (i > 1) {
+                            try {
+                                const rawPreviousTables = await dbService.getPdfTablesByPage(docId, i - 1);
+                                if (rawPreviousTables && rawPreviousTables.length > 0) {
+                                    previousTablesParams = rawPreviousTables.map(t => ({
+                                        table_name: t.table_name,
+                                        schema_fields: t.schema_json
+                                    }));
+                                }
+                            } catch (e) {
+                                console.error("Failed to fetch previous page tables:", e);
+                            }
+                        }
+
+                        const { tables, debug_info } = await apiService.extractTables(text, previousTablesParams);
 
                         if (debug_info) {
                             const currentJob = get().jobs[docId];
@@ -389,6 +441,9 @@ export const useExtractionStore = create<ExtractionState>((set, get) => ({
                             }
 
                             await dbService.saveExtractedData(tables, docId, i);
+
+                            // Increment totalTables state
+                            set((state) => ({ totalTables: state.totalTables + tables.length }));
                         }
                     } catch (e) {
                         console.error("AI Extraction failed:", e);
@@ -397,9 +452,8 @@ export const useExtractionStore = create<ExtractionState>((set, get) => ({
 
                 updateJob(docId, { processedPages: i });
 
-                if (i > 0 && i % 5 === 0) {
-                    dbService.updateDocumentStatus(docId, 'processing', i);
-                }
+                // Update DB on EVERY page exactly, to support resuming instantly if tab closed
+                dbService.updateDocumentStatus(docId, 'processing', i);
             }
 
             // If finished and not paused

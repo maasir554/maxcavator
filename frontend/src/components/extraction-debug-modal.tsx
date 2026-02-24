@@ -18,10 +18,9 @@ interface ExtractionDebugModalProps {
         prompt: string;
         rawResponse: string;
     }>;
-    maxPage: number;
 }
 
-export function ExtractionDebugModal({ debugInfo, maxPage }: ExtractionDebugModalProps) {
+export function ExtractionDebugModal({ debugInfo }: ExtractionDebugModalProps) {
     // If no debug info at all, don't render button
     if (!debugInfo || Object.keys(debugInfo).length === 0) return null;
 
@@ -55,7 +54,7 @@ export function ExtractionDebugModal({ debugInfo, maxPage }: ExtractionDebugModa
     }
 
     return (
-        <Dialog open={isOpen} onOpenChange={setIsOpen} className="w-full">
+        <Dialog open={isOpen} onOpenChange={setIsOpen}>
             <DialogTrigger asChild>
                 <Button variant="ghost" size="icon" className="h-6 w-6" title="Inspect Extraction Details">
                     <Eye className="h-4 w-4" />

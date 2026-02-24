@@ -164,7 +164,7 @@ export default function LayoutShell({ children }: { children: React.ReactNode })
 
             {/* Right Sidebar (Processing Queue) — animated like left sidebar */}
             <aside className={`hidden lg:flex border-l bg-muted/5 flex-col shrink-0 transition-all duration-200 ease-in-out overflow-hidden ${activityOpen ? 'w-80' : 'w-0 border-l-0'}`}>
-                <div className="w-80 h-full flex flex-col">
+                <div className="w-80 h-full flex flex-col min-w-0">
                     <div className="p-3 border-b bg-background/50 backdrop-blur flex items-center justify-between shrink-0">
                         <div className="flex items-center gap-2 font-semibold text-sm">
                             <Activity className="h-4 w-4" />
@@ -174,7 +174,9 @@ export default function LayoutShell({ children }: { children: React.ReactNode })
                             <ChevronsRight className="h-3.5 w-3.5" />
                         </Button>
                     </div>
-                    <ProcessingQueue highlightedJobId={highlightedJobId} />
+                    <div className="flex-1 w-full overflow-hidden min-h-0">
+                        <ProcessingQueue highlightedJobId={highlightedJobId} />
+                    </div>
                 </div>
             </aside>
         </div>

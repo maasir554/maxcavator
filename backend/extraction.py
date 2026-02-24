@@ -60,6 +60,7 @@ RULES:
 - The "text_summary" should be a readable sentence, not just key-value pairs.
 - Use snake_case for table_name and field names.
 - Infer data types: use NUMERIC for numbers, DATE for dates, BOOLEAN for yes/no, TEXT for everything else.
+- CRITICAL CONTINUATION RULE: If previous tables are provided and you identify a table that is a continuation of a table from the previous page, you MUST inherit the exact "table_name" and exact "schema_fields" from the provided previous table. Do not invent new column names for continued tables.
 - If NO tables are found, return {"tables": []}.
 """
 
@@ -84,11 +85,18 @@ Write a SINGLE SQL query to answer this. Do not use Markdown. Do not explain. Ju
 """
 
 
-def extract_tables_from_text(text: str) -> Tuple[List[TableExtraction], Dict[str, str]]:
+def extract_tables_from_text(text: str, previous_tables: list = None) -> Tuple[List[TableExtraction], Dict[str, str]]:
     messages = [
-        {"role": "system", "content": TABLE_EXTRACTION_PROMPT + "\n\nCRITICAL: You must return a valid JSON object with a 'tables' key."},
-        {"role": "user", "content": text}
+        {"role": "system", "content": TABLE_EXTRACTION_PROMPT + "\n\nCRITICAL: You must return a valid JSON object with a 'tables' key."}
     ]
+    
+    if previous_tables:
+        messages.append({
+            "role": "user", 
+            "content": f"PREVIOUS PAGE TABLES SCHEMAS (inherit if continuing):\n{json.dumps(previous_tables, indent=2)}"
+        })
+        
+    messages.append({"role": "user", "content": text})
     
     completion = get_next_client().chat.completions.create(
         model="openai/gpt-oss-120b",

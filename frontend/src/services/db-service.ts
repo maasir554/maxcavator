@@ -10,12 +10,15 @@ export interface Document {
     created_at: string;
     updated_at?: string;
     deleted_at?: string | null;
+    dismissed_from_queue?: boolean;
+    name_embedding?: number[];
 }
 
 export const dbService = {
     async getAllDocuments(): Promise<Document[]> {
         const db = getDb();
         const res = await db.query("SELECT * FROM documents WHERE deleted_at IS NULL ORDER BY created_at DESC");
+        // console.log("getAllDocuments raw result:", res.rows);
         return res.rows as Document[];
     },
 
@@ -30,26 +33,40 @@ export const dbService = {
         // PGlite returns query results, we need to extract the ID.
         // Since we use gen_random_uuid(), we can just insert and return id.
         const res = await db.query(
-            "INSERT INTO documents (filename, source_url) VALUES ($1, $2) RETURNING id",
+            "INSERT INTO documents (filename, source_url, dismissed_from_queue) VALUES ($1, $2, FALSE) RETURNING id",
             [filename, sourceUrl || null]
         );
         return (res.rows[0] as any).id;
     },
 
-    async updateDocumentStatus(id: string, status: string, processedPages: number) {
+    async updateDocumentStatus(id: string, status: string, processedPages: number, totalPages?: number) {
         const db = getDb();
-        await db.query(
-            "UPDATE documents SET status = $1, processed_pages = $2, updated_at = NOW() WHERE id = $3",
-            [status, processedPages, id]
-        );
+        if (totalPages !== undefined) {
+            await db.query(
+                "UPDATE documents SET status = $1, processed_pages = $2, total_pages = $3, updated_at = NOW() WHERE id = $4",
+                [status, processedPages, totalPages, id]
+            );
+        } else {
+            await db.query(
+                "UPDATE documents SET status = $1, processed_pages = $2, updated_at = NOW() WHERE id = $3",
+                [status, processedPages, id]
+            );
+        }
     },
 
-    async updateDocumentTitleAndSummary(id: string, title: string, summary: string) {
+    async updateDocumentTitleAndSummary(id: string, title: string, summary: string, nameEmbedding?: number[]) {
         const db = getDb();
-        await db.query(
-            "UPDATE documents SET filename = $1, summary = $2, updated_at = NOW() WHERE id = $3",
-            [title, summary, id]
-        );
+        if (nameEmbedding) {
+            await db.query(
+                "UPDATE documents SET filename = $1, summary = $2, name_embedding = $3, updated_at = NOW() WHERE id = $4",
+                [title, summary, JSON.stringify(nameEmbedding), id]
+            );
+        } else {
+            await db.query(
+                "UPDATE documents SET filename = $1, summary = $2, updated_at = NOW() WHERE id = $3",
+                [title, summary, id]
+            );
+        }
     },
 
     async getTables() {
@@ -154,6 +171,21 @@ export const dbService = {
         return res.rows;
     },
 
+    async getTotalTableCount(): Promise<number> {
+        const db = getDb();
+        const res = await db.query("SELECT COUNT(*) as count FROM pdf_tables");
+        return parseInt((res.rows[0] as any).count, 10);
+    },
+
+    async getPdfTablesByPage(docId: string, pageNumber: number): Promise<any[]> {
+        const db = getDb();
+        const res = await db.query(
+            "SELECT * FROM pdf_tables WHERE document_id = $1 AND page_number = $2",
+            [docId, pageNumber]
+        );
+        return res.rows;
+    },
+
     async getChunks(tableId: string): Promise<any[]> {
         const db = getDb();
         const res = await db.query(
@@ -185,6 +217,11 @@ export const dbService = {
         await db.query("UPDATE documents SET deleted_at = NOW(), updated_at = NOW() WHERE id = $1", [id]);
     },
 
+    async dismissDocument(id: string) {
+        const db = getDb();
+        await db.query("UPDATE documents SET dismissed_from_queue = TRUE, updated_at = NOW() WHERE id = $1", [id]);
+    },
+
     async restoreDocument(id: string) {
         const db = getDb();
         await db.query("UPDATE documents SET deleted_at = NULL, updated_at = NOW() WHERE id = $1", [id]);
@@ -203,4 +240,46 @@ export const dbService = {
         );
         return (res.rows as any[]).map(r => r.id);
     },
+
+    async semanticFileSearch(queryEmbedding: number[]): Promise<string[]> {
+        const db = getDb();
+        const embStr = JSON.stringify(queryEmbedding);
+
+        const res = await db.query(`
+            WITH doc_matches AS (
+                SELECT id as document_id, 1 - (name_embedding <=> $1) as score
+                FROM documents 
+                WHERE deleted_at IS NULL AND name_embedding IS NOT NULL
+            ),
+            table_matches AS (
+                SELECT pt.document_id, 1 - (pt.summary_embedding <=> $1) * 0.9 as score
+                FROM pdf_tables pt
+                JOIN documents d ON d.id = pt.document_id
+                WHERE d.deleted_at IS NULL AND pt.summary_embedding IS NOT NULL
+            ),
+            chunk_matches AS (
+                SELECT c.document_id, 1 - (c.summary_embedding <=> $1) * 0.8 as score
+                FROM chunks c
+                JOIN documents d ON d.id = c.document_id
+                WHERE d.deleted_at IS NULL AND c.summary_embedding IS NOT NULL
+            ),
+            combined AS (
+                SELECT document_id, max(score) as max_score FROM (
+                    SELECT * FROM doc_matches
+                    UNION ALL
+                    SELECT * FROM table_matches
+                    UNION ALL
+                    SELECT * FROM chunk_matches
+                ) all_matches
+                GROUP BY document_id
+            )
+            SELECT document_id, max_score
+            FROM combined
+            WHERE max_score > 0.3
+            ORDER BY max_score DESC
+            LIMIT 20;
+        `, [embStr]);
+
+        return res.rows.map((r: any) => r.document_id as string);
+    }
 };

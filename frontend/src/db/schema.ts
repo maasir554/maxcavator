@@ -11,7 +11,9 @@ CREATE TABLE IF NOT EXISTS documents (
   processed_pages INT DEFAULT 0,
   created_at TIMESTAMP DEFAULT NOW(),
   updated_at TIMESTAMP DEFAULT NOW(),
-  deleted_at TIMESTAMP DEFAULT NULL
+  deleted_at TIMESTAMP DEFAULT NULL,
+  dismissed_from_queue BOOLEAN DEFAULT FALSE,
+  name_embedding vector(3072)
 );
 
 CREATE TABLE IF NOT EXISTS pdf_tables (
@@ -51,6 +53,16 @@ END $$;
 
 DO $$ BEGIN
   ALTER TABLE documents ADD COLUMN summary TEXT;
+EXCEPTION WHEN duplicate_column THEN NULL;
+END $$;
+
+DO $$ BEGIN
+  ALTER TABLE documents ADD COLUMN dismissed_from_queue BOOLEAN DEFAULT FALSE;
+EXCEPTION WHEN duplicate_column THEN NULL;
+END $$;
+
+DO $$ BEGIN
+  ALTER TABLE documents ADD COLUMN name_embedding vector(3072);
 EXCEPTION WHEN duplicate_column THEN NULL;
 END $$;
 

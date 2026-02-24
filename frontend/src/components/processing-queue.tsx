@@ -4,11 +4,12 @@ import { DeleteConfirmModal } from "@/components/delete-confirm-modal"
 import { useExtractionStore } from '@/store/extraction-store';
 import { Progress } from "@/components/ui/progress"
 import { ScrollArea } from "@/components/ui/scroll-area"
-import { FileText, Loader2, CheckCircle, AlertCircle, PauseCircle, Play } from 'lucide-react'
+import { FileText, Loader2, CheckCircle, AlertCircle, PauseCircle, Play, X, ChevronDown, ChevronUp } from 'lucide-react'
 import { Button } from "@/components/ui/button"
+import * as React from 'react'
 
 // Truncate filename to max length with ellipsis
-const truncateFilename = (filename: string, maxLength: number = 30) => {
+const truncateFilename = (filename: string, maxLength: number = 22) => {
     if (filename.length <= maxLength) return filename;
     const ext = filename.slice(filename.lastIndexOf('.'));
     const nameLength = maxLength - ext.length - 3; // -3 for '...'
@@ -18,15 +19,24 @@ const truncateFilename = (filename: string, maxLength: number = 30) => {
 export function ProcessingQueue({ highlightedJobId }: { highlightedJobId?: string | null }) {
     const jobs = useExtractionStore((state) => state.jobs);
     const pauseJob = useExtractionStore((state) => state.pauseJob);
-    const resumeJob = useExtractionStore((state) => state.resumeJob);
     const startJob = useExtractionStore((state) => state.startJob);
+    const dismissJob = useExtractionStore((state) => state.dismissJob);
 
-    const activeJobs = Object.values(jobs).sort((a, b) => {
-        // Sort by status (processing first), then time (implied by insertion order if docId is UUID/Time)
-        if (a.status === 'processing') return -1;
-        if (b.status === 'processing') return 1;
-        return 0;
-    });
+    // Track which cards are manually collapsed
+    const [collapsedIds, setCollapsedIds] = React.useState<Record<string, boolean>>({});
+
+    const toggleCollapse = (id: string, e: React.MouseEvent) => {
+        e.stopPropagation();
+        setCollapsedIds(prev => ({ ...prev, [id]: !prev[id] }));
+    };
+
+    const activeJobs = Object.values(jobs)
+        .filter(j => !j.dismissed_from_queue)
+        .sort((a, b) => {
+            if (a.status === 'processing') return -1;
+            if (b.status === 'processing') return 1;
+            return 0;
+        });
 
     if (activeJobs.length === 0) {
         return (
@@ -37,59 +47,101 @@ export function ProcessingQueue({ highlightedJobId }: { highlightedJobId?: strin
     }
 
     return (
-        <ScrollArea className="h-full">
-            <div className="space-y-3 p-3">
-                {activeJobs.map((job) => (
-                    <div
-                        key={job.documentId}
-                        className={`border rounded-lg p-3 space-y-3 bg-card transition-all duration-700 ${highlightedJobId === job.documentId ? 'ring-2 ring-primary/50 shadow-md' : ''}`}
-                    >
-                        <div className="flex items-start justify-between">
-                            <div className="flex items-center space-x-2 overflow-hidden">
-                                <FileText className="h-4 w-4 shrink-0 text-muted-foreground" />
-                                <span className="text-sm font-medium truncate" title={job.filename}>
-                                    {truncateFilename(job.filename)}
-                                </span>
-                            </div>
-                            <div className="flex items-center gap-1">
-                                {job.debugInfo && (
-                                    <ExtractionDebugModal
-                                        debugInfo={job.debugInfo}
-                                        maxPage={job.processedPages}
-                                    />
-                                )}
-                                <DeleteConfirmModal documentId={job.documentId} filename={job.filename} />
-                                {getIcon(job.status)}
-                            </div>
-                        </div>
+        <ScrollArea className="h-full w-full">
+            <div className="space-y-3 p-3 w-full max-w-full overflow-x-hidden">
+                {activeJobs.map((job) => {
+                    const isCollapsed = collapsedIds[job.documentId];
+                    const progress = Math.round((job.processedPages / (job.totalPages || 1)) * 100);
 
-                        <div className="space-y-1">
-                            <div className="flex justify-between text-xs text-muted-foreground">
-                                <span>{getStatusText(job)}</span>
-                                <span>{Math.round((job.processedPages / (job.totalPages || 1)) * 100)}%</span>
+                    return (
+                        <div
+                            key={job.documentId}
+                            onClick={(e) => isCollapsed ? toggleCollapse(job.documentId, e) : undefined}
+                            className={`group border rounded-lg p-3 flex flex-col gap-3 bg-card transition-all duration-300 w-full overflow-hidden shrink-0 ${isCollapsed ? 'cursor-pointer hover:border-primary/50' : ''} ${highlightedJobId === job.documentId ? 'ring-2 ring-primary/50 shadow-md' : ''}`}
+                        >
+                            {/* Top Row: Icon, Name, (Hover Controls), Status Icon */}
+                            <div className="flex items-center justify-between gap-2 w-full min-w-0">
+                                <div className="flex items-center gap-3 overflow-hidden flex-1 min-w-0">
+                                    <FileText className="h-4 w-4 shrink-0 text-muted-foreground" />
+                                    <div className="flex flex-col flex-1 min-w-0 overflow-hidden w-full">
+                                        <span className="text-sm font-medium truncate block w-full" title={job.filename}>
+                                            {truncateFilename(job.filename)}
+                                        </span>
+                                        {isCollapsed && (
+                                            <div className="flex items-center gap-2 mt-1">
+                                                <Progress value={progress} className="h-1 flex-1 bg-secondary w-full" />
+                                                <span className="text-[10px] text-muted-foreground whitespace-nowrap shrink-0 leading-none">
+                                                    {job.processedPages}/{job.totalPages || 1}
+                                                </span>
+                                            </div>
+                                        )}
+                                    </div>
+                                </div>
+
+                                {/* Right side controls */}
+                                <div className="flex items-center gap-1 shrink-0 relative bg-card">
+                                    {/* Action buttons (only visible on group hover) */}
+                                    <div className="absolute right-full top-1/2 -translate-y-1/2 flex items-center gap-1 opacity-0 group-hover:opacity-100 transition-opacity pointer-events-none group-hover:pointer-events-auto bg-card pl-3 pr-1 py-1 mr-1">
+                                        {job.debugInfo && (
+                                            <ExtractionDebugModal
+                                                debugInfo={job.debugInfo}
+                                            />
+                                        )}
+                                        {job.file && (
+                                            <PdfInspectionModal docId={job.documentId} iconOnly />
+                                        )}
+                                        <DeleteConfirmModal documentId={job.documentId} filename={job.filename} iconOnly />
+                                        {job.status === 'completed' && (
+                                            <Button variant="ghost" size="icon" className="h-6 w-6 text-muted-foreground hover:text-foreground" onClick={(e) => { e.stopPropagation(); dismissJob(job.documentId); }} title="Dismiss from queue">
+                                                <X className="h-4 w-4" />
+                                            </Button>
+                                        )}
+                                    </div>
+
+                                    {/* Constant Status Icon */}
+                                    <div className="ml-1 z-10 bg-card shrink-0" title={getStatusText(job)}>
+                                        {getIcon(job.status)}
+                                    </div>
+
+                                    {/* Collapse Toggle */}
+                                    <Button
+                                        variant="ghost"
+                                        size="icon"
+                                        className="h-6 w-6 ml-1 text-muted-foreground hover:text-foreground shrink-0 z-10 bg-card"
+                                        onClick={(e) => toggleCollapse(job.documentId, e)}
+                                    >
+                                        {isCollapsed ? <ChevronDown className="h-4 w-4" /> : <ChevronUp className="h-4 w-4" />}
+                                    </Button>
+                                </div>
                             </div>
-                            <Progress value={(job.processedPages / (job.totalPages || 1)) * 100} className="h-2" />
-                        </div>
 
-                        <div className="flex flex-wrap justify-end gap-1.5 mt-2">
-                            {job.file && (
-                                <PdfInspectionModal docId={job.documentId} file={job.file} />
-                            )}
+                            {/* Collapsible Content */}
+                            {!isCollapsed && (
+                                <div className="space-y-3 animate-in fade-in slide-in-from-top-2 duration-200">
+                                    <div className="space-y-1">
+                                        <div className="flex justify-between text-xs text-muted-foreground">
+                                            <span>{getStatusText(job)}</span>
+                                            <span>{progress}%</span>
+                                        </div>
+                                        <Progress value={progress} className="h-2" />
+                                    </div>
 
-                            {(job.status === 'queued' || job.status === 'paused' || job.status === 'error') && job.file && (
-                                <Button size="sm" onClick={() => startJob(job.documentId)} className="gap-1.5 text-xs h-7">
-                                    <Play className="h-3 w-3" /> {job.status === 'paused' ? "Resume" : "Extract"}
-                                </Button>
-                            )}
-                            {(job.status === 'queued' || job.status === 'paused' || job.status === 'error') && !job.file && (
-                                <span className="text-xs text-muted-foreground italic">PDF file missing</span>
-                            )}
-                            {job.status === 'processing' && (
-                                <Button size="sm" variant="outline" className="text-xs h-7" onClick={() => pauseJob(job.documentId)}>Pause</Button>
+                                    {/* Bottom Controls (Extract/Pause) */}
+                                    <div className="flex justify-end gap-1.5 mt-2">
+                                        {(job.status === 'queued' || job.status === 'paused' || job.status === 'error') && job.file && (
+                                            <Button size="sm" onClick={() => startJob(job.documentId)} className="gap-1.5 text-xs h-7">
+                                                <Play className="h-3 w-3" /> {job.status === 'paused' ? "Resume" : "Extract"}
+                                            </Button>
+                                        )}
+                                        {job.status === 'processing' && (
+                                            <Button size="sm" variant="outline" className="text-xs h-7" onClick={() => pauseJob(job.documentId)}>Pause</Button>
+                                        )}
+                                    </div>
+                                </div>
                             )}
                         </div>
-                    </div>
-                ))}
+                    );
+                })}
             </div>
         </ScrollArea>
     );

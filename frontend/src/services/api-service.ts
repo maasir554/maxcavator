@@ -22,11 +22,16 @@ export interface TableExtraction {
 }
 
 export const apiService = {
-    async extractTables(text: string): Promise<{ tables: TableExtraction[], debug_info?: any }> {
+    async extractTables(text: string, previousTables?: any[]): Promise<{ tables: TableExtraction[], debug_info?: any }> {
+        const body: any = { text };
+        if (previousTables && previousTables.length > 0) {
+            body.previous_tables = previousTables;
+        }
+
         const res = await fetch(`${API_URL}/extract`, {
             method: "POST",
             headers: { "Content-Type": "application/json" },
-            body: JSON.stringify({ text }),
+            body: JSON.stringify(body),
         });
         if (!res.ok) throw new Error("Extraction failed");
         const data = await res.json();

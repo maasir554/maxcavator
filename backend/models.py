@@ -19,6 +19,7 @@ class TableExtraction(BaseModel):
 
 class ExtractionRequest(BaseModel):
     text: str
+    previous_tables: Optional[List[Dict[str, Any]]] = None
 
 class ExtractionResponse(BaseModel):
     tables: List[TableExtraction]

@@ -7,9 +7,10 @@ import { useExtractionStore } from '@/store/extraction-store'
 interface DeleteConfirmModalProps {
     documentId: string
     filename: string
+    iconOnly?: boolean
 }
 
-export function DeleteConfirmModal({ documentId, filename }: DeleteConfirmModalProps) {
+export function DeleteConfirmModal({ documentId, filename, iconOnly }: DeleteConfirmModalProps) {
     const [isOpen, setIsOpen] = useState(false)
     const [isDeleting, setIsDeleting] = useState(false)
     const trashJob = useExtractionStore(state => state.trashJob)
@@ -29,15 +30,27 @@ export function DeleteConfirmModal({ documentId, filename }: DeleteConfirmModalP
 
     return (
         <>
-            <Button
-                size="icon"
-                variant="ghost"
-                className="h-7 w-7 text-muted-foreground hover:text-destructive"
-                onClick={() => setIsOpen(true)}
-                title="Delete"
-            >
-                <Trash2 className="h-3.5 w-3.5" />
-            </Button>
+            {iconOnly ? (
+                <Button
+                    size="icon"
+                    variant="ghost"
+                    className="h-6 w-6 text-muted-foreground hover:text-destructive transition-colors shrink-0"
+                    onClick={() => setIsOpen(true)}
+                    title="Delete"
+                >
+                    <Trash2 className="h-4 w-4" />
+                </Button>
+            ) : (
+                <Button
+                    size="icon"
+                    variant="ghost"
+                    className="h-7 w-7 text-muted-foreground hover:text-destructive"
+                    onClick={() => setIsOpen(true)}
+                    title="Delete"
+                >
+                    <Trash2 className="h-3.5 w-3.5" />
+                </Button>
+            )}
 
             <Dialog open={isOpen} onOpenChange={setIsOpen}>
                 <DialogContent className="sm:max-w-[400px]">

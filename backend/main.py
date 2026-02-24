@@ -29,7 +29,7 @@ from embeddings import generate_embeddings
 
 @app.post("/extract", response_model=ExtractionResponse)
 def extract_tables(request: ExtractionRequest):
-    tables, debug_info = extract_tables_from_text(request.text)
+    tables, debug_info = extract_tables_from_text(request.text, request.previous_tables)
     return ExtractionResponse(tables=tables, debug_info=debug_info)
 
 @app.post("/pdf_summary", response_model=PdfSummaryResponse)
