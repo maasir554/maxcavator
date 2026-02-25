@@ -281,5 +281,90 @@ export const dbService = {
         `, [embStr]);
 
         return res.rows.map((r: any) => r.document_id as string);
+    },
+
+    async semanticChunkSearch(queryEmbedding: number[], limit: number = 3): Promise<any[]> {
+        const db = getDb();
+        const embStr = JSON.stringify(queryEmbedding);
+
+        // Search specifically chunks, joining with pdf_tables to get the context and with documents to ensure it's not deleted
+        const res = await db.query(`
+            SELECT 
+                c.id, 
+                c.document_id, 
+                c.page_number, 
+                c.data, 
+                c.text_summary,
+                pt.table_name,
+                d.filename,
+                1 - (c.summary_embedding <=> $1) as similarity_score
+            FROM chunks c
+            JOIN pdf_tables pt ON c.pdf_table_id = pt.id
+            JOIN documents d ON c.document_id = d.id
+            WHERE d.deleted_at IS NULL AND c.summary_embedding IS NOT NULL
+            ORDER BY similarity_score DESC
+            LIMIT $2;
+        `, [embStr, limit]);
+
+        return res.rows;
+    },
+
+    async topDownSemanticSearch(queryEmbedding: number[], limit: number = 5): Promise<any[]> {
+        const db = getDb();
+        const embStr = JSON.stringify(queryEmbedding);
+
+        // Step 1: Find top 3 docs
+        // Step 2: Find top 3 tables in those docs
+        // Step 3: Find top 3 tables overall
+        // Step 4: Union the tables
+        // Step 5: Find top chunks within those tables
+        const res = await db.query(`
+            WITH top_docs AS (
+                SELECT id 
+                FROM documents 
+                WHERE deleted_at IS NULL AND name_embedding IS NOT NULL 
+                ORDER BY name_embedding <=> $1 
+                LIMIT 3
+            ),
+            top_tables_per_doc AS (
+                SELECT t.id FROM (
+                    SELECT pt.id, ROW_NUMBER() OVER(PARTITION BY pt.document_id ORDER BY pt.summary_embedding <=> $1) as rn
+                    FROM pdf_tables pt
+                    JOIN top_docs td ON pt.document_id = td.id
+                    WHERE pt.summary_embedding IS NOT NULL
+                ) t WHERE t.rn <= 3
+            ),
+            top_tables_overall AS (
+                SELECT pt.id 
+                FROM pdf_tables pt
+                JOIN documents d ON pt.document_id = d.id
+                WHERE d.deleted_at IS NULL AND pt.summary_embedding IS NOT NULL 
+                ORDER BY pt.summary_embedding <=> $1 
+                LIMIT 3
+            ),
+            combined_tables AS (
+                SELECT id FROM top_tables_per_doc
+                UNION
+                SELECT id FROM top_tables_overall
+            )
+            SELECT 
+                c.id, 
+                c.document_id, 
+                c.page_number, 
+                c.data, 
+                c.text_summary,
+                pt.table_name,
+                d.filename,
+                1 - (c.summary_embedding <=> $1) as similarity_score
+            FROM chunks c
+            JOIN combined_tables ct ON c.pdf_table_id = ct.id
+            JOIN pdf_tables pt ON c.pdf_table_id = pt.id
+            JOIN documents d ON c.document_id = d.id
+            WHERE d.deleted_at IS NULL AND c.summary_embedding IS NOT NULL
+            ORDER BY similarity_score DESC
+            LIMIT $2;
+        `, [embStr, limit]);
+
+        return res.rows;
     }
 };

@@ -22,7 +22,7 @@ app.add_middleware(
 def read_root():
     return {"status": "ok", "message": "Maxcavator Backend Running"}
 
-from models import ExtractionRequest, ExtractionResponse, SqlQueryRequest, SqlQueryResponse, PdfSummaryRequest, PdfSummaryResponse, EmbedRequest, EmbedResponse
+from models import ExtractionRequest, ExtractionResponse, SqlQueryRequest, SqlQueryResponse, PdfSummaryRequest, PdfSummaryResponse, EmbedRequest, EmbedResponse, RagRequest, RagResponse
 from extraction import extract_tables_from_text, generate_sql_query, extract_pdf_summary
 from vision_ocr import extract_text_from_image
 from embeddings import generate_embeddings
@@ -58,6 +58,16 @@ def vision_ocr(request: VisionOcrRequest):
 def query_sql(request: SqlQueryRequest):
     sql = generate_sql_query(request.user_query, request.table_schema)
     return SqlQueryResponse(sql=sql)
+
+from extraction import generate_rag_response
+
+@app.post("/rag_chat", response_model=RagResponse)
+def rag_chat(request: RagRequest):
+    result = generate_rag_response(request.user_query, request.context_chunks)
+    return RagResponse(
+        response=result.get("response", ""), 
+        used_chunk_ids=result.get("used_chunk_ids", [])
+    )
 
 from fastapi import Response
 import requests

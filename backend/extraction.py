@@ -164,3 +164,49 @@ def generate_sql_query(user_query: str, table_schema: dict) -> str:
     sql = completion.choices[0].message.content.strip()
     sql = sql.replace("```sql", "").replace("```", "").strip()
     return sql
+
+RAG_CHAT_PROMPT = """
+You are a highly intelligent and helpful data assistant for MAXCAVATOR. 
+The user will ask a question about their PDF data.
+You have been provided with CONTEXT CHUNKS which represent the most semantically relevant data extracted from the user's documents.
+
+RULES:
+1. Answer the user's question explicitly and ONLY using the provided CONTEXT CHUNKS.
+2. Formulate your response in clear, concise natural language. Use markdown formatting where it makes sense (bold text, lists, etc) to be readable.
+3. If the answer cannot be found in the provided CONTEXT CHUNKS, explicitly state: "I could not find the answer to this question in the extracted documents." Do not guess or hallucinate.
+4. You MUST explicitly map which provided chunks you used to formulate your answer.
+
+Output Format (JSON only):
+{
+  "answer": "Your natural language response here...",
+  "used_chunk_ids": ["id-of-chunk-1", "id-of-chunk-2"]
+}
+"""
+
+def generate_rag_response(user_query: str, context_chunks: list) -> dict:
+    messages = [
+        {"role": "system", "content": RAG_CHAT_PROMPT + "\n\nCRITICAL: Return valid JSON only."},
+        {"role": "user", "content": f"CONTEXT CHUNKS:\n{json.dumps(context_chunks, indent=2)}\n\nUSER QUESTION: {user_query}"}
+    ]
+
+    completion = get_next_client().chat.completions.create(
+        model="openai/gpt-oss-120b",
+        messages=messages,
+        temperature=0.2, # Slight temperature for natural phrasing while remaining factual
+        response_format={"type": "json_object"}
+    )
+    
+    content = completion.choices[0].message.content.strip()
+    try:
+        data = json.loads(content)
+        return {
+            "response": data.get("answer", "I encountered an error formatting my response."),
+            "used_chunk_ids": data.get("used_chunk_ids", [])
+        }
+    except Exception as e:
+        print(f"Error parsing RAG response: {e}")
+        return {
+            "response": "Sorry, I had trouble generating a structured response based on the documents.",
+            "used_chunk_ids": []
+        }
+

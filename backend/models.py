@@ -44,3 +44,11 @@ class EmbedRequest(BaseModel):
 
 class EmbedResponse(BaseModel):
     embeddings: List[List[float]]
+
+class RagRequest(BaseModel):
+    user_query: str
+    context_chunks: List[Dict]
+
+class RagResponse(BaseModel):
+    response: str
+    used_chunk_ids: List[str]

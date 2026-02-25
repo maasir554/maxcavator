@@ -78,5 +78,16 @@ export const apiService = {
         if (!res.ok) throw new Error("Embedding generation failed");
         const data = await res.json();
         return data.embeddings;
+    },
+
+    async generateRagChat(userQuery: string, contextChunks: any[]): Promise<{ response: string, used_chunk_ids: string[] }> {
+        const res = await fetch(`${API_URL}/rag_chat`, {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ user_query: userQuery, context_chunks: contextChunks }),
+        });
+        if (!res.ok) throw new Error("Failed to generate RAG response");
+        const data = await res.json();
+        return { response: data.response, used_chunk_ids: data.used_chunk_ids || [] };
     }
 };

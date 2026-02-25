@@ -15,6 +15,7 @@ import { renderPdfPageMainThread } from "@/services/pdf-renderer"
 interface DocumentViewerModalProps {
     docId: string;
     iconOnly?: boolean;
+    initialPage?: number;
 }
 
 // Sub-component to handle IntersectionObserver and lazy rendering per page
@@ -78,9 +79,9 @@ function PdfPageRenderer({ file, pageNum, isActive, onVisible }: { file: File, p
     )
 }
 
-export function DocumentViewerModal({ docId, iconOnly }: DocumentViewerModalProps) {
+export function DocumentViewerModal({ docId, iconOnly, initialPage }: DocumentViewerModalProps) {
     const [isOpen, setIsOpen] = useState(false);
-    const [activePage, setActivePage] = useState<number>(1);
+    const [activePage, setActivePage] = useState<number>(initialPage || 1);
 
     const [tables, setTables] = useState<any[]>([]);
     const [chunks, setChunks] = useState<any[]>([]);
@@ -88,6 +89,20 @@ export function DocumentViewerModal({ docId, iconOnly }: DocumentViewerModalProp
 
     const jobs = useExtractionStore(state => state.jobs);
     const job = jobs[docId];
+
+    // Auto-scroll when modal opens and initialPage is passed
+    useEffect(() => {
+        if (isOpen && initialPage && job) {
+            setActivePage(initialPage);
+            // Give the DOM a moment to render the placeholders and the Dialog animation to settle
+            setTimeout(() => {
+                const element = document.getElementById(`pdf-page-${initialPage}`);
+                if (element) {
+                    element.scrollIntoView({ behavior: 'auto', block: 'start' });
+                }
+            }, 400);
+        }
+    }, [isOpen, initialPage, job]);
 
     useEffect(() => {
         if (isOpen && docId) {
