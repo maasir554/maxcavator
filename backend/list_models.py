@@ -3,7 +3,8 @@ from dotenv import load_dotenv
 from google import genai
 
 load_dotenv()
-client = genai.Client(api_key=os.environ.get("GEMINI_API_KEY"))
+api_key = os.environ.get("GEMINI_API_KEY_1") or os.environ.get("GEMINI_API_KEY")
+client = genai.Client(api_key=api_key)
 
 print("Listing models containing 'embed', '004', or '001':")
 for m in client.models.list():
