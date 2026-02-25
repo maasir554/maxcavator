@@ -5,12 +5,13 @@ import { Sheet, SheetContent, SheetTrigger } from "@/components/ui/sheet"
 import { Separator } from "@/components/ui/separator"
 import {
     Menu, FileText, Database, MessageSquare,
-    Activity, ChevronsLeft, ChevronsRight
+    Activity, ChevronsLeft, ChevronsRight, ExternalLink, Copy
 } from "lucide-react"
 import { NewPdfModal } from "@/components/new-pdf-modal"
 import { ProcessingQueue } from "@/components/processing-queue"
 import { ThemeToggle } from "@/components/theme-toggle"
 import { useExtractionStore } from '@/store/extraction-store'
+import examplesConfig from '@/config/examples.json'
 
 interface SidebarProps {
     className?: string
@@ -19,9 +20,6 @@ interface SidebarProps {
 }
 
 export function Sidebar({ className, collapsed = false, onToggleCollapse }: SidebarProps) {
-    const jobs = useExtractionStore(state => state.jobs);
-    const jobList = Object.values(jobs).sort((a, b) => b.documentId.localeCompare(a.documentId));
-
     return (
         <div className={`pb-12 border-r bg-background h-screen flex flex-col transition-all duration-200 ease-in-out ${collapsed ? 'w-14' : 'w-60'} ${className ?? ''}`}>
             <div className="flex-1 flex flex-col overflow-hidden">
@@ -58,18 +56,39 @@ export function Sidebar({ className, collapsed = false, onToggleCollapse }: Side
                     {!collapsed && (
                         <>
                             <h2 className="mb-2 px-2 text-xs font-semibold tracking-wider uppercase text-muted-foreground">
-                                Recent Files
+                                Example PDFs
                             </h2>
-                            <ScrollArea className="flex-1 px-1">
-                                <div className="space-y-0.5">
-                                    {jobList.length === 0 && (
-                                        <p className="text-xs text-muted-foreground px-2 py-1">No files yet.</p>
-                                    )}
-                                    {jobList.map(job => (
-                                        <Button key={job.documentId} variant="ghost" size="sm" className="w-full justify-start font-normal truncate h-8">
-                                            <FileText className="mr-2 h-3.5 w-3.5 shrink-0 text-muted-foreground" />
-                                            <span className="truncate text-xs">{job.filename}</span>
-                                        </Button>
+                            <ScrollArea className="flex-1 px-1 overflow-hidden w-full">
+                                <div className="space-y-2 pr-2 w-[210px] overflow-hidden">
+                                    {examplesConfig.map((example, idx) => (
+                                        <div key={idx} className="flex flex-col gap-1 p-2 rounded-md hover:bg-muted/50 transition-colors w-full min-w-0">
+                                            <div className="flex items-center gap-2 w-full min-w-0">
+                                                <FileText className="h-3.5 w-3.5 shrink-0 text-muted-foreground" />
+                                                <span className="truncate text-xs font-medium flex-1" title={example.name}>
+                                                    {example.name}
+                                                </span>
+                                            </div>
+                                            <div className="flex items-center gap-1 pl-5">
+                                                <Button
+                                                    variant="ghost"
+                                                    size="icon"
+                                                    className="h-6 w-6 rounded-sm text-muted-foreground hover:text-primary hover:bg-primary/10"
+                                                    onClick={() => window.open(example.url, '_blank')}
+                                                    title="Open Link in New Tab"
+                                                >
+                                                    <ExternalLink className="h-3 w-3" />
+                                                </Button>
+                                                <Button
+                                                    variant="ghost"
+                                                    size="icon"
+                                                    className="h-6 w-6 rounded-sm text-muted-foreground hover:text-primary hover:bg-primary/10"
+                                                    onClick={() => navigator.clipboard.writeText(example.url)}
+                                                    title="Copy Link"
+                                                >
+                                                    <Copy className="h-3 w-3" />
+                                                </Button>
+                                            </div>
+                                        </div>
                                     ))}
                                 </div>
                             </ScrollArea>
@@ -147,7 +166,27 @@ export default function LayoutShell({ children }: { children: React.ReactNode })
 
             {/* Main Content */}
             <main className="flex-1 flex flex-col h-screen overflow-hidden relative">
-                {/* Right sidebar toggle when collapsed */}
+                {/* Mobile Right Sidebar Toggle */}
+                <Sheet>
+                    <SheetTrigger asChild className="md:hidden absolute right-4 top-4 z-40">
+                        <Button variant="outline" size="icon">
+                            <Activity className="h-4 w-4" />
+                        </Button>
+                    </SheetTrigger>
+                    <SheetContent side="right" className="p-0 w-80">
+                        <div className="w-full h-full flex flex-col min-w-0">
+                            <div className="p-4 border-b bg-background/50 backdrop-blur flex items-center gap-2 font-semibold">
+                                <Activity className="h-4 w-4" />
+                                Activity
+                            </div>
+                            <div className="flex-1 w-full overflow-hidden min-h-0">
+                                <ProcessingQueue highlightedJobId={highlightedJobId} />
+                            </div>
+                        </div>
+                    </SheetContent>
+                </Sheet>
+
+                {/* Right sidebar toggle when collapsed (Desktop) */}
                 {!activityOpen && (
                     <button
                         onClick={() => setActivityOpen(true)}
@@ -157,12 +196,12 @@ export default function LayoutShell({ children }: { children: React.ReactNode })
                         <Activity className="h-4 w-4 text-muted-foreground" />
                     </button>
                 )}
-                <div className="flex-1 overflow-y-auto p-6 md:p-8 pt-16 md:pt-8">
+                <div className="flex-1 overflow-y-auto p-6 md:p-8 pt-16 md:pt-8 w-full">
                     {children}
                 </div>
             </main>
 
-            {/* Right Sidebar (Processing Queue) — animated like left sidebar */}
+            {/* Right Sidebar Desktop (Processing Queue) */}
             <aside className={`hidden lg:flex border-l bg-muted/5 flex-col shrink-0 transition-all duration-200 ease-in-out overflow-hidden ${activityOpen ? 'w-80' : 'w-0 border-l-0'}`}>
                 <div className="w-80 h-full flex flex-col min-w-0">
                     <div className="p-3 border-b bg-background/50 backdrop-blur flex items-center justify-between shrink-0">

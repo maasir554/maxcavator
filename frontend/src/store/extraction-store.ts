@@ -52,6 +52,8 @@ interface ExtractionState {
     extractPdfText: (docId: string, pageNum: number) => Promise<{ text: string }>;
     testAi: (text: string) => Promise<{ tables: any[], debug_info?: any }>;
     _processJob: (file: File, docId: string, startPage: number) => Promise<void>;
+    focusedDocumentIds: string[];
+    setFocusedDocumentIds: (ids: string[]) => void;
 }
 
 export const useExtractionStore = create<ExtractionState>((set, get) => ({
@@ -60,6 +62,8 @@ export const useExtractionStore = create<ExtractionState>((set, get) => ({
     trashAutoDeleteHours: parseInt(localStorage.getItem(TRASH_DURATION_KEY) || '5', 10),
     totalTables: 0,
     isLoading: true,
+    focusedDocumentIds: [],
+    setFocusedDocumentIds: (ids) => set({ focusedDocumentIds: ids }),
 
     loadJobs: async () => {
         try {

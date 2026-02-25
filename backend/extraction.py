@@ -28,7 +28,7 @@ You are a data extraction engine. Analyze the following OCR text from a document
 3. Provide a schema describing each field's name, data type, and a brief description.
 4. Write a concise summary of what the table represents.
 5. Add any relevant notes (e.g., currency, units, data quality caveats).
-6. For each chunk, write a one-line natural language summary of that specific entry.
+6. For each chunk, write a highly descriptive one-line natural language summary of that specific entry. This summary MUST explicitly feature all vital context parameters of the row including the main entity, exact periods or dates, and the core metrics/values.
 
 Output Format (JSON only):
 {
@@ -57,7 +57,7 @@ Output Format (JSON only):
 RULES:
 - Every row in the original table must become exactly one chunk.
 - The "data" object keys must match the "schema_fields" field names exactly.
-- The "text_summary" should be a readable sentence, not just key-value pairs.
+- The "text_summary" should be a readable sentence, not just key-value pairs (e.g., "In Q2 2023, Acme Corp generated $5M in revenue"). Include available dates, metric units, and periods!
 - Use snake_case for table_name and field names.
 - Infer data types: use NUMERIC for numbers, DATE for dates, BOOLEAN for yes/no, TEXT for everything else.
 - CRITICAL CONTINUATION RULE: If previous tables are provided and you identify a table that is a continuation of a table from the previous page, you MUST inherit the exact "table_name" and exact "schema_fields" from the provided previous table. Do not invent new column names for continued tables.

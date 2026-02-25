@@ -1,6 +1,7 @@
 import { useState, useEffect } from "react"
+import { useLocation, useRoute } from "wouter"
 import { Button } from "@/components/ui/button"
-import { Database, FileText, LayoutList, ExternalLink, Code, ArrowLeft, Table2, ChevronRight, MoreVertical, Trash } from "lucide-react"
+import { Database, FileText, LayoutList, ExternalLink, Code, ArrowLeft, Table2, ChevronRight, MoreVertical, Trash, MessageSquare } from "lucide-react"
 import { useExtractionStore } from '@/store/extraction-store'
 import { dbService } from '@/services/db-service'
 import { DocumentViewerModal } from "./document-viewer-modal"
@@ -14,18 +15,21 @@ import {
 
 interface FileDetailsViewProps {
     documentId: string;
-    onBack: () => void;
 }
 
-export function FileDetailsView({ documentId, onBack }: FileDetailsViewProps) {
+export function FileDetailsView({ documentId }: FileDetailsViewProps) {
+    const [, setLocation] = useLocation();
+    const [, params] = useRoute('/document/:id/table/:tableId');
+    const selectedTableId = params?.tableId || null;
+
     const jobs = useExtractionStore(state => state.jobs);
+    const setFocusedDocumentIds = useExtractionStore(state => state.setFocusedDocumentIds);
     const job = jobs[documentId];
 
     const [tables, setTables] = useState<any[]>([]);
     const [chunks, setChunks] = useState<any[]>([]);
     const [dbDoc, setDbDoc] = useState<any>(null);
     const [isLoadingData, setIsLoadingData] = useState(false);
-    const [selectedTableId, setSelectedTableId] = useState<string | null>(null);
     const [isScrolledTop, setIsScrolledTop] = useState({ tables: true, details: true });
 
     const trashJob = useExtractionStore(state => state.trashJob);
@@ -56,6 +60,14 @@ export function FileDetailsView({ documentId, onBack }: FileDetailsViewProps) {
 
     const isScrolled = selectedTableId ? !isScrolledTop.details : !isScrolledTop.tables;
 
+    const handleBack = () => {
+        if (selectedTableId) {
+            setLocation(`/document/${documentId}`);
+        } else {
+            setLocation('/');
+        }
+    };
+
     return (
         <div className="flex-1 flex flex-col min-h-0 fade-in fill-mode-forwards animate-in">
             {/* Header / Navigation Bar */}
@@ -67,7 +79,7 @@ export function FileDetailsView({ documentId, onBack }: FileDetailsViewProps) {
                         <Button
                             variant="ghost"
                             size="sm"
-                            onClick={selectedTableId ? () => setSelectedTableId(null) : onBack}
+                            onClick={handleBack}
                             className="w-fit -ml-2 text-muted-foreground hover:text-foreground"
                         >
                             <ArrowLeft className="h-4 w-4 mr-1" />
@@ -81,7 +93,7 @@ export function FileDetailsView({ documentId, onBack }: FileDetailsViewProps) {
                             <Button
                                 variant="ghost"
                                 size="icon"
-                                onClick={selectedTableId ? () => setSelectedTableId(null) : onBack}
+                                onClick={handleBack}
                                 className="h-8 w-8 -ml-2 text-muted-foreground hover:text-foreground shrink-0"
                             >
                                 <ArrowLeft className="h-4 w-4" />
@@ -118,9 +130,20 @@ export function FileDetailsView({ documentId, onBack }: FileDetailsViewProps) {
                             </>
                         )}
                         <span className="shrink-0">•</span>
+                        <Button
+                            variant="outline"
+                            size="sm"
+                            className="h-7 px-2 text-xs flex items-center gap-1 hover:bg-blue-50 dark:hover:bg-blue-900/20 hover:text-blue-600 dark:hover:text-blue-400 hover:border-blue-200 dark:hover:border-blue-800 transition-colors"
+                            onClick={() => {
+                                setFocusedDocumentIds([documentId]);
+                                setLocation(`/chat?focus_docs=${documentId}`);
+                            }}
+                        >
+                            <MessageSquare className="h-3 w-3" /> Focus Chat
+                        </Button>
                         <DropdownMenu>
                             <DropdownMenuTrigger asChild>
-                                <Button variant="ghost" size="icon" className="h-6 w-6 shrink-0">
+                                <Button variant="ghost" size="icon" className="h-7 w-7 shrink-0">
                                     <MoreVertical className="h-4 w-4" />
                                 </Button>
                             </DropdownMenuTrigger>
@@ -129,7 +152,7 @@ export function FileDetailsView({ documentId, onBack }: FileDetailsViewProps) {
                                     className="text-destructive focus:text-destructive cursor-pointer"
                                     onClick={() => {
                                         trashJob(documentId);
-                                        onBack();
+                                        handleBack();
                                     }}
                                 >
                                     <Trash className="mr-2 h-4 w-4" />
@@ -191,7 +214,7 @@ export function FileDetailsView({ documentId, onBack }: FileDetailsViewProps) {
                                         return (
                                             <div
                                                 key={table.id}
-                                                onClick={() => setSelectedTableId(table.id)}
+                                                onClick={() => setLocation(`/document/${documentId}/table/${table.id}`)}
                                                 className="group border rounded-lg p-4 bg-card hover:border-primary/50 hover:shadow-sm transition-all cursor-pointer flex flex-col min-w-0"
                                             >
                                                 <div className="flex items-start justify-between mb-2 min-w-0">

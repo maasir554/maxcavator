@@ -16,6 +16,7 @@ interface DocumentViewerModalProps {
     docId: string;
     iconOnly?: boolean;
     initialPage?: number;
+    children?: React.ReactNode;
 }
 
 // Sub-component to handle IntersectionObserver and lazy rendering per page
@@ -79,7 +80,7 @@ function PdfPageRenderer({ file, pageNum, isActive, onVisible }: { file: File, p
     )
 }
 
-export function DocumentViewerModal({ docId, iconOnly, initialPage }: DocumentViewerModalProps) {
+export function DocumentViewerModal({ docId, iconOnly, initialPage, children }: DocumentViewerModalProps) {
     const [isOpen, setIsOpen] = useState(false);
     const [activePage, setActivePage] = useState<number>(initialPage || 1);
 
@@ -139,7 +140,7 @@ export function DocumentViewerModal({ docId, iconOnly, initialPage }: DocumentVi
     return (
         <Dialog open={isOpen} onOpenChange={setIsOpen}>
             <DialogTrigger asChild>
-                {iconOnly ? (
+                {children ? children : (iconOnly ? (
                     <Button variant="ghost" size="icon" className="h-8 w-8 hover:text-primary hover:bg-primary/10" title="Inspect Document Details">
                         <Eye className="h-4 w-4" />
                     </Button>
@@ -148,7 +149,7 @@ export function DocumentViewerModal({ docId, iconOnly, initialPage }: DocumentVi
                         <FileText className="h-4 w-4" />
                         Explore Extracted Pages
                     </Button>
-                )}
+                ))}
             </DialogTrigger>
             <DialogContent
                 className="max-w-[95vw] sm:max-w-[95vw] w-full h-[95vh] flex flex-col p-0 overflow-hidden bg-background"
@@ -265,7 +266,13 @@ export function DocumentViewerModal({ docId, iconOnly, initialPage }: DocumentVi
                                                                         {parentTable ? parentTable.table_name : 'Unknown Table'}
                                                                     </span>
                                                                 </div>
-                                                                <pre className="whitespace-pre-wrap font-mono text-foreground/80 overflow-x-auto">
+                                                                {chunk.text_summary && (
+                                                                    <div className="mb-2 text-[11px] text-muted-foreground bg-muted/30 p-2 rounded-md leading-relaxed border border-muted">
+                                                                        <span className="font-semibold text-primary/70 mr-1">Summary:</span>
+                                                                        {chunk.text_summary}
+                                                                    </div>
+                                                                )}
+                                                                <pre className="whitespace-pre-wrap font-mono text-foreground/80 overflow-x-auto bg-background p-2 rounded border">
                                                                     {JSON.stringify(chunk.data, null, 2)}
                                                                 </pre>
                                                             </div>

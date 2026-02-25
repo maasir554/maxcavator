@@ -1,4 +1,5 @@
 import { useEffect, useState } from 'react'
+import { useLocation, useRoute } from 'wouter'
 import LayoutShell from "@/components/layout-shell"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
@@ -21,7 +22,10 @@ function App() {
   const totalTables = useExtractionStore(state => state.totalTables);
   const recentFiles = Object.values(jobs).sort((a, b) => b.documentId.localeCompare(a.documentId)).slice(0, 6);
 
-  const [selectedFileId, setSelectedFileId] = useState<string | null>(null);
+  const [location, setLocation] = useLocation();
+  const [isDocRoute, docParams] = useRoute('/document/:id/*?');
+  const selectedFileId = isDocRoute ? docParams.id : null;
+
   const [isScrolled, setIsScrolled] = useState(false);
 
   useEffect(() => {
@@ -41,9 +45,18 @@ function App() {
     );
   }
 
+  const activeTab = location.startsWith('/chat') ? 'chat'
+    : location.startsWith('/data') ? 'data'
+      : location.startsWith('/trash') ? 'trash'
+        : 'dashboard';
+
   return (
     <LayoutShell>
-      <Tabs defaultValue="dashboard" className="h-full flex flex-col">
+      <Tabs
+        value={activeTab}
+        onValueChange={(val) => setLocation(val === 'dashboard' ? '/' : `/${val}`)}
+        className="h-full flex flex-col"
+      >
         {!selectedFileId && (
           <div className={`transition-all duration-300 origin-top-left ${isScrolled ? 'mb-2 scale-90 opacity-80' : 'mb-4 scale-100 opacity-100'}`}>
             <TabsList className="transition-all duration-300">
@@ -74,7 +87,6 @@ function App() {
           {selectedFileId ? (
             <FileDetailsView
               documentId={selectedFileId}
-              onBack={() => setSelectedFileId(null)}
             />
           ) : (
             <>
@@ -121,7 +133,7 @@ function App() {
                         <div
                           key={job.documentId}
                           className="flex items-center gap-3 p-3 rounded-md border bg-muted/30 hover:bg-muted/60 transition-colors cursor-pointer"
-                          onClick={() => setSelectedFileId(job.documentId)}
+                          onClick={() => setLocation(`/document/${job.documentId}`)}
                         >
                           <FileText className="h-4 w-4 text-muted-foreground shrink-0" />
                           <div className="flex-1 min-w-0">
@@ -142,7 +154,7 @@ function App() {
 
               {/* All Files Explorer */}
               <div className="flex-1 min-h-[300px] shrink-0 mb-8">
-                <FileExplorer onSelectFile={setSelectedFileId} />
+                <FileExplorer onSelectFile={(id) => setLocation(`/document/${id}`)} />
               </div>
             </>
           )}

@@ -283,9 +283,15 @@ export const dbService = {
         return res.rows.map((r: any) => r.document_id as string);
     },
 
-    async semanticChunkSearch(queryEmbedding: number[], limit: number = 3): Promise<any[]> {
+    async semanticChunkSearch(queryEmbedding: number[], limit: number = 3, focusedDocumentIds?: string[]): Promise<any[]> {
         const db = getDb();
         const embStr = JSON.stringify(queryEmbedding);
+
+        let filterClause = "";
+        if (focusedDocumentIds && focusedDocumentIds.length > 0) {
+            const idsStr = focusedDocumentIds.map(id => `'${id}'`).join(',');
+            filterClause = ` AND d.id IN (${idsStr})`;
+        }
 
         // Search specifically chunks, joining with pdf_tables to get the context and with documents to ensure it's not deleted
         const res = await db.query(`
@@ -301,7 +307,7 @@ export const dbService = {
             FROM chunks c
             JOIN pdf_tables pt ON c.pdf_table_id = pt.id
             JOIN documents d ON c.document_id = d.id
-            WHERE d.deleted_at IS NULL AND c.summary_embedding IS NOT NULL
+            WHERE d.deleted_at IS NULL AND c.summary_embedding IS NOT NULL ${filterClause}
             ORDER BY similarity_score DESC
             LIMIT $2;
         `, [embStr, limit]);
@@ -309,9 +315,18 @@ export const dbService = {
         return res.rows;
     },
 
-    async topDownSemanticSearch(queryEmbedding: number[], limit: number = 5): Promise<any[]> {
+    async topDownSemanticSearch(queryEmbedding: number[], limit: number = 5, focusedDocumentIds?: string[]): Promise<any[]> {
         const db = getDb();
         const embStr = JSON.stringify(queryEmbedding);
+
+        let filterClauseDocs = "";
+        let filterClauseTables = "";
+
+        if (focusedDocumentIds && focusedDocumentIds.length > 0) {
+            const idsStr = focusedDocumentIds.map(id => `'${id}'`).join(',');
+            filterClauseDocs = ` AND id IN (${idsStr})`;
+            filterClauseTables = ` AND d.id IN (${idsStr})`;
+        }
 
         // Step 1: Find top 3 docs
         // Step 2: Find top 3 tables in those docs
@@ -322,7 +337,7 @@ export const dbService = {
             WITH top_docs AS (
                 SELECT id 
                 FROM documents 
-                WHERE deleted_at IS NULL AND name_embedding IS NOT NULL 
+                WHERE deleted_at IS NULL AND name_embedding IS NOT NULL ${filterClauseDocs}
                 ORDER BY name_embedding <=> $1 
                 LIMIT 3
             ),
@@ -338,7 +353,7 @@ export const dbService = {
                 SELECT pt.id 
                 FROM pdf_tables pt
                 JOIN documents d ON pt.document_id = d.id
-                WHERE d.deleted_at IS NULL AND pt.summary_embedding IS NOT NULL 
+                WHERE d.deleted_at IS NULL AND pt.summary_embedding IS NOT NULL ${filterClauseTables}
                 ORDER BY pt.summary_embedding <=> $1 
                 LIMIT 3
             ),
@@ -360,7 +375,7 @@ export const dbService = {
             JOIN combined_tables ct ON c.pdf_table_id = ct.id
             JOIN pdf_tables pt ON c.pdf_table_id = pt.id
             JOIN documents d ON c.document_id = d.id
-            WHERE d.deleted_at IS NULL AND c.summary_embedding IS NOT NULL
+            WHERE d.deleted_at IS NULL AND c.summary_embedding IS NOT NULL ${filterClauseTables}
             ORDER BY similarity_score DESC
             LIMIT $2;
         `, [embStr, limit]);
