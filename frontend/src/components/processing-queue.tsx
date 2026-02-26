@@ -4,6 +4,7 @@ import { DeleteConfirmModal } from "@/components/delete-confirm-modal"
 import { useExtractionStore } from '@/store/extraction-store';
 import { Progress } from "@/components/ui/progress"
 import { ScrollArea } from "@/components/ui/scroll-area"
+import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip"
 import { FileText, Loader2, CheckCircle, AlertCircle, PauseCircle, Play, X, ChevronDown, ChevronUp } from 'lucide-react'
 import { Button } from "@/components/ui/button"
 import * as React from 'react'
@@ -99,9 +100,16 @@ export function ProcessingQueue({ highlightedJobId }: { highlightedJobId?: strin
                                     </div>
 
                                     {/* Constant Status Icon */}
-                                    <div className="ml-1 z-10 bg-card shrink-0" title={getStatusText(job)}>
-                                        {getIcon(job.status)}
-                                    </div>
+                                    <Tooltip>
+                                        <TooltipTrigger asChild>
+                                            <div className="ml-2 z-10 flex items-center justify-center h-full">
+                                                <div className={`w-2.5 h-2.5 rounded-full ${job.status === 'completed' ? 'bg-green-500' : job.status === 'error' ? 'bg-red-500' : 'bg-yellow-500'}`} />
+                                            </div>
+                                        </TooltipTrigger>
+                                        <TooltipContent side="bottom" className="max-w-[95vw] wrap-break-word">
+                                            <p>{getStatusText(job)}</p>
+                                        </TooltipContent>
+                                    </Tooltip>
 
                                     {/* Collapse Toggle */}
                                     <Button
@@ -145,16 +153,6 @@ export function ProcessingQueue({ highlightedJobId }: { highlightedJobId?: strin
             </div>
         </ScrollArea>
     );
-}
-
-function getIcon(status: string) {
-    switch (status) {
-        case 'processing': return <Loader2 className="h-4 w-4 animate-spin text-blue-500" />;
-        case 'completed': return <CheckCircle className="h-4 w-4 text-green-500" />;
-        case 'error': return <AlertCircle className="h-4 w-4 text-red-500" />;
-        case 'paused': return <PauseCircle className="h-4 w-4 text-yellow-500" />;
-        default: return <div className="h-4 w-4" />;
-    }
 }
 
 function getStatusText(job: any) {

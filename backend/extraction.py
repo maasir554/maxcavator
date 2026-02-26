@@ -23,12 +23,12 @@ def get_next_client():
 TABLE_EXTRACTION_PROMPT = """
 You are a data extraction engine. Analyze the following OCR text from a document page.
 
-1. Identify ALL tables, lists, or structured data in the text.
+1. Identify ALL tables, lists, or structured data in the text. Look closely at the BOTTOM of tables or pages for footnotes, keys, or abbreviations (e.g., "* denotes estimated values" or "Rev = Revenue").
 2. For each table, extract EVERY row as an individual "chunk" — a self-contained JSON record.
-3. Provide a schema describing each field's name, data type, and a brief description.
+3. Provide a schema describing each field's name, data type, and a brief description. Incorporate any abbreviations Found into the column descriptions.
 4. Write a concise summary of what the table represents.
-5. Add any relevant notes (e.g., currency, units, data quality caveats).
-6. For each chunk, write a highly descriptive one-line natural language summary of that specific entry. This summary MUST explicitly feature all vital context parameters of the row including the main entity, exact periods or dates, and the core metrics/values.
+5. Add any relevant notes (e.g., currency, units, data quality caveats, footnotes, abbreviation definitions).
+6. For each chunk, write a highly descriptive three-line natural language summary of that specific entry. This summary MUST explicitly feature all vital context parameters of the row including the main entity, and all the parameters present.
 
 Output Format (JSON only):
 {
@@ -36,12 +36,12 @@ Output Format (JSON only):
     {
       "table_name": "snake_case_name",
       "summary": "Brief description of what this table contains",
-      "notes": "Any relevant context, units, caveats",
+      "notes": "Any relevant context, units, caveats, abbreviations (important!)",
       "schema_fields": [
         {
           "name": "field_name",
           "type": "TEXT|NUMERIC|DATE|BOOLEAN",
-          "description": "What this field represents"
+          "description": "What this field represents (include full form if abbreviated in raw text)"
         }
       ],
       "chunks": [
@@ -49,7 +49,8 @@ Output Format (JSON only):
           "data": {"field_name": "value", ...},
           "text_summary": "One-line natural language summary of this entry"
         }
-      ]
+      ],
+      "updated_notes": null | string
     }
   ]
 }
@@ -60,7 +61,12 @@ RULES:
 - The "text_summary" should be a readable sentence, not just key-value pairs (e.g., "In Q2 2023, Acme Corp generated $5M in revenue"). Include available dates, metric units, and periods!
 - Use snake_case for table_name and field names.
 - Infer data types: use NUMERIC for numbers, DATE for dates, BOOLEAN for yes/no, TEXT for everything else.
-- CRITICAL CONTINUATION RULE: If previous tables are provided and you identify a table that is a continuation of a table from the previous page, you MUST inherit the exact "table_name" and exact "schema_fields" from the provided previous table. Do not invent new column names for continued tables.
+- CRITICAL CONTINUATION RULE: If previous tables are provided and you identify a table that is a continuation of a table from the previous page:
+  1. You MUST inherit the exact "table_name" to link them.
+  2. For the chunks, you MUST use the exact "schema_fields" from the provided previous table. Do not invent new column keys for the chunk data.
+  3. However, if this new page contains crucial NEW context about the table at the bottom (like abbreviation definitions) that wasn't in the previous schema or notes:
+     - Provide the NEW, improved notes in "updated_notes".
+  4. If no new context is found, leave "updated_schema_fields" and "updated_notes" as null.
 - If NO tables are found, return {"tables": []}.
 """
 
@@ -93,7 +99,7 @@ def extract_tables_from_text(text: str, previous_tables: list = None) -> Tuple[L
     if previous_tables:
         messages.append({
             "role": "user", 
-            "content": f"PREVIOUS PAGE TABLES SCHEMAS (inherit if continuing):\n{json.dumps(previous_tables, indent=2)}"
+            "content": f"PREVIOUS PAGE TABLES SCHEMAS (inherit if continuing, but update via updated_notes if new/important context found):\n{json.dumps(previous_tables, indent=2)}"
         })
         
     messages.append({"role": "user", "content": text})

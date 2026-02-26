@@ -145,9 +145,9 @@ export function DocumentViewerModal({ docId, iconOnly, initialPage, children }: 
                         <Eye className="h-4 w-4" />
                     </Button>
                 ) : (
-                    <Button variant="outline" size="sm" className="gap-2">
+                    <Button variant="outline" size="sm" className="gap-2 h-8 w-8 px-0 sm:h-9 sm:px-3 sm:w-auto">
                         <FileText className="h-4 w-4" />
-                        Explore Extracted Pages
+                        <span className="hidden sm:inline">Explore</span>
                     </Button>
                 ))}
             </DialogTrigger>

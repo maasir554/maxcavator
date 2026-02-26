@@ -133,6 +133,30 @@ export const dbService = {
         return (res.rows[0] as any).id;
     },
 
+    async updatePdfTableSchemaAndNotes(
+        tableId: string,
+        newSchema: any[],
+        newNotes: string,
+        newSummaryEmbedding?: number[]
+    ) {
+        const db = getDb();
+        if (newSummaryEmbedding) {
+            await db.query(
+                `UPDATE pdf_tables 
+                 SET schema_json = $1, notes = $2, summary_embedding = $3, updated_at = NOW() 
+                 WHERE id = $4`,
+                [JSON.stringify(newSchema), newNotes, JSON.stringify(newSummaryEmbedding), tableId]
+            );
+        } else {
+            await db.query(
+                `UPDATE pdf_tables 
+                 SET schema_json = $1, notes = $2, updated_at = NOW() 
+                 WHERE id = $3`,
+                [JSON.stringify(newSchema), newNotes, tableId]
+            );
+        }
+    },
+
     async saveChunks(
         tableId: string,
         docId: string,

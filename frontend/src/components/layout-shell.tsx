@@ -1,4 +1,5 @@
 import { useState, useEffect, useRef } from 'react'
+import { useRoute, useLocation } from 'wouter'
 import { Button } from "@/components/ui/button"
 import { ScrollArea } from "@/components/ui/scroll-area"
 import { Sheet, SheetContent, SheetTrigger } from "@/components/ui/sheet"
@@ -41,6 +42,25 @@ export function Sidebar({ className, collapsed = false, onToggleCollapse }: Side
                         <Database className="h-4 w-4 shrink-0" />
                         {!collapsed && <span className="ml-2 truncate">Data Explorer</span>}
                     </Button>
+                    <Sheet>
+                        <SheetTrigger asChild>
+                            <Button variant="ghost" className={`w-full md:hidden ${collapsed ? 'justify-center px-0' : 'justify-start'}`} title="Activity Queue">
+                                <Activity className="h-4 w-4 shrink-0" />
+                                {!collapsed && <span className="ml-2 truncate">Activity Queue</span>}
+                            </Button>
+                        </SheetTrigger>
+                        <SheetContent side="right" className="p-0 w-80">
+                            <div className="w-full h-full flex flex-col min-w-0">
+                                <div className="p-4 border-b bg-background/50 backdrop-blur flex items-center gap-2 font-semibold">
+                                    <Activity className="h-4 w-4" />
+                                    Activity
+                                </div>
+                                <div className="flex-1 w-full overflow-hidden min-h-0">
+                                    <ProcessingQueue />
+                                </div>
+                            </div>
+                        </SheetContent>
+                    </Sheet>
                 </div>
 
                 <Separator />
@@ -122,6 +142,8 @@ export default function LayoutShell({ children }: { children: React.ReactNode })
     const [sidebarCollapsed, setSidebarCollapsed] = useState(false)
     const [activityOpen, setActivityOpen] = useState(true)
     const [highlightedJobId, setHighlightedJobId] = useState<string | null>(null)
+    const [isDocRoute] = useRoute('/document/:id/*?');
+    const [location] = useLocation();
 
     // Track job count to detect newly added jobs
     const jobs = useExtractionStore(state => state.jobs);
@@ -154,7 +176,7 @@ export default function LayoutShell({ children }: { children: React.ReactNode })
 
             {/* Mobile Left Sidebar */}
             <Sheet open={isSidebarOpen} onOpenChange={setIsSidebarOpen}>
-                <SheetTrigger asChild className="md:hidden absolute left-4 top-4 z-40">
+                <SheetTrigger asChild className={`absolute left-4 top-4 z-40 ${isDocRoute ? 'hidden' : 'md:hidden'}`}>
                     <Button variant="outline" size="icon">
                         <Menu className="h-4 w-4" />
                     </Button>
@@ -167,27 +189,29 @@ export default function LayoutShell({ children }: { children: React.ReactNode })
             {/* Main Content */}
             <main className="flex-1 flex flex-col h-screen overflow-hidden relative">
                 {/* Mobile Right Sidebar Toggle */}
-                <Sheet>
-                    <SheetTrigger asChild className="md:hidden absolute right-4 top-4 z-40">
-                        <Button variant="outline" size="icon">
-                            <Activity className="h-4 w-4" />
-                        </Button>
-                    </SheetTrigger>
-                    <SheetContent side="right" className="p-0 w-80">
-                        <div className="w-full h-full flex flex-col min-w-0">
-                            <div className="p-4 border-b bg-background/50 backdrop-blur flex items-center gap-2 font-semibold">
+                {location === '/' && (
+                    <Sheet>
+                        <SheetTrigger asChild className="hidden md:flex lg:hidden absolute right-4 top-4 z-40">
+                            <Button variant="outline" size="icon">
                                 <Activity className="h-4 w-4" />
-                                Activity
+                            </Button>
+                        </SheetTrigger>
+                        <SheetContent side="right" className="p-0 w-80">
+                            <div className="w-full h-full flex flex-col min-w-0">
+                                <div className="p-4 border-b bg-background/50 backdrop-blur flex items-center gap-2 font-semibold">
+                                    <Activity className="h-4 w-4" />
+                                    Activity
+                                </div>
+                                <div className="flex-1 w-full overflow-hidden min-h-0">
+                                    <ProcessingQueue highlightedJobId={highlightedJobId} />
+                                </div>
                             </div>
-                            <div className="flex-1 w-full overflow-hidden min-h-0">
-                                <ProcessingQueue highlightedJobId={highlightedJobId} />
-                            </div>
-                        </div>
-                    </SheetContent>
-                </Sheet>
+                        </SheetContent>
+                    </Sheet>
+                )}
 
                 {/* Right sidebar toggle when collapsed (Desktop) */}
-                {!activityOpen && (
+                {!activityOpen && location === '/' && (
                     <button
                         onClick={() => setActivityOpen(true)}
                         className="absolute right-3 top-3 z-30 bg-muted/80 hover:bg-muted border rounded-md p-1.5 transition-colors hidden lg:flex items-center"
@@ -196,28 +220,30 @@ export default function LayoutShell({ children }: { children: React.ReactNode })
                         <Activity className="h-4 w-4 text-muted-foreground" />
                     </button>
                 )}
-                <div className="flex-1 overflow-y-auto p-6 md:p-8 pt-16 md:pt-8 w-full">
+                <div className="flex-1 overflow-y-auto p-6 md:p-4 md:pt-4 w-full">
                     {children}
                 </div>
             </main>
 
             {/* Right Sidebar Desktop (Processing Queue) */}
-            <aside className={`hidden lg:flex border-l bg-muted/5 flex-col shrink-0 transition-all duration-200 ease-in-out overflow-hidden ${activityOpen ? 'w-80' : 'w-0 border-l-0'}`}>
-                <div className="w-80 h-full flex flex-col min-w-0">
-                    <div className="p-3 border-b bg-background/50 backdrop-blur flex items-center justify-between shrink-0">
-                        <div className="flex items-center gap-2 font-semibold text-sm">
-                            <Activity className="h-4 w-4" />
-                            Activity
+            {location === '/' && (
+                <aside className={`hidden lg:flex border-l bg-muted/5 flex-col shrink-0 transition-all duration-200 ease-in-out overflow-hidden ${activityOpen ? 'w-80' : 'w-0 border-l-0'}`}>
+                    <div className="w-80 h-full flex flex-col min-w-0">
+                        <div className="p-3 border-b bg-background/50 backdrop-blur flex items-center justify-between shrink-0">
+                            <div className="flex items-center gap-2 font-semibold text-sm">
+                                <Activity className="h-4 w-4" />
+                                Activity
+                            </div>
+                            <Button variant="ghost" size="icon" className="h-7 w-7" onClick={() => setActivityOpen(false)} title="Close Activity Queue">
+                                <ChevronsRight className="h-3.5 w-3.5" />
+                            </Button>
                         </div>
-                        <Button variant="ghost" size="icon" className="h-7 w-7" onClick={() => setActivityOpen(false)} title="Close Activity Queue">
-                            <ChevronsRight className="h-3.5 w-3.5" />
-                        </Button>
+                        <div className="flex-1 w-full overflow-hidden min-h-0">
+                            <ProcessingQueue highlightedJobId={highlightedJobId} />
+                        </div>
                     </div>
-                    <div className="flex-1 w-full overflow-hidden min-h-0">
-                        <ProcessingQueue highlightedJobId={highlightedJobId} />
-                    </div>
-                </div>
-            </aside>
+                </aside>
+            )}
         </div>
     )
 }

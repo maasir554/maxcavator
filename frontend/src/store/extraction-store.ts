@@ -412,42 +412,145 @@ export const useExtractionStore = create<ExtractionState>((set, get) => ({
                                 }
                             });
                         }
-
                         console.log(`Extracted ${tables.length} tables from page ${i}`);
                         if (tables.length > 0) {
-                            // Generate embeddings for table summaries and chunk summaries
-                            try {
-                                const textsToEmbed: string[] = [];
+                            // First, we need to process the tables to see which are new and which are continuations
+                            // Fetch ALL currently saved tables for this document to check for continuations
+                            const existingDocTables = await dbService.getPdfTables(docId);
+                            const newTablesToSave = [];
 
-                                // Collect all texts
-                                for (const table of tables) {
-                                    textsToEmbed.push(table.summary || "");
-                                    for (const chunk of table.chunks || []) {
-                                        textsToEmbed.push(chunk.text_summary || "");
-                                    }
-                                }
+                            for (const table of tables) {
+                                // Check if this table already exists (is a continuation)
+                                const existingTable = existingDocTables.find(t => t.table_name === table.table_name);
 
-                                if (textsToEmbed.length > 0) {
-                                    console.log(`Generating embeddings for ${textsToEmbed.length} items...`);
-                                    const embeddings = await apiService.generateEmbeddings(textsToEmbed);
+                                if (existingTable) {
+                                    console.log(`Found continuation for table: ${table.table_name}`);
 
-                                    // Map embeddings back to objects
-                                    let embIndex = 0;
-                                    for (const table of tables) {
-                                        table.summary_embedding = embeddings[embIndex++];
-                                        for (const chunk of table.chunks || []) {
-                                            chunk.summary_embedding = embeddings[embIndex++];
+                                    // 1. Check if we need to update the schema or notes of the existing table based on bottom-page context
+                                    let needsUpdate = false;
+                                    let newNotes = existingTable.notes;
+                                    let newSchema = existingTable.schema_json;
+                                    // Because it was JSON.stringified in db, it comes out as parsed array depending on PGlite driver. 
+                                    // Assume it's parsed, if it's string we'd parse it. But dbService saves it as JSON string, PGlite JSONb returns object.
+
+                                    if (table.updated_notes && table.updated_notes !== existingTable.notes) {
+                                        newNotes = table.updated_notes;
+                                        needsUpdate = true;
+                                    } else if (table.notes && table.notes !== existingTable.notes && table.notes.trim() !== "") {
+                                        // Fallback: AI sometimes ignores `updated_notes` and just populates `notes`
+                                        // with the new information found on the current page.
+                                        const oldStr = (existingTable.notes || "").trim();
+                                        const newStr = table.notes.trim();
+
+                                        if (newStr.length > oldStr.length + 10) {
+                                            newNotes = newStr; // Assume it's a completely better rewritten note
+                                            needsUpdate = true;
+                                        } else if (newStr.length > 3 && !oldStr.includes(newStr)) {
+                                            // If it contains new small info (like an abbreviation key), concatenate them
+                                            newNotes = oldStr ? `${oldStr} | ${newStr}` : newStr;
+                                            needsUpdate = true;
                                         }
                                     }
+
+                                    if (table.updated_schema_fields) {
+                                        newSchema = table.updated_schema_fields;
+                                        needsUpdate = true;
+                                    }
+
+                                    let newSummaryEmbedding: number[] | undefined;
+
+                                    if (needsUpdate) {
+                                        console.log(`Updating schema/notes for continued table: ${table.table_name}`);
+
+                                        // Regenerate table embedding if notes changed to ensure Top-Down RAG works
+                                        if (newNotes !== existingTable.notes) {
+                                            try {
+                                                const searchString = `${existingTable.summary || table.summary || ""}\nNotes: ${newNotes}`;
+                                                const embeddings = await apiService.generateEmbeddings([searchString]);
+                                                if (embeddings && embeddings.length > 0) {
+                                                    newSummaryEmbedding = embeddings[0];
+                                                }
+                                            } catch (e) {
+                                                console.error("Failed to regenerate table summary embedding", e);
+                                            }
+                                        }
+
+                                        await dbService.updatePdfTableSchemaAndNotes(
+                                            existingTable.id,
+                                            newSchema,
+                                            newNotes,
+                                            newSummaryEmbedding
+                                        );
+                                    }
+
+                                    // 2. Generate embeddings for the chunks of this continued table
+                                    try {
+                                        const chunkTextsToEmbed = (table.chunks || []).map((c: any) => c.text_summary || "");
+                                        if (chunkTextsToEmbed.length > 0) {
+                                            const embeddings = await apiService.generateEmbeddings(chunkTextsToEmbed);
+                                            for (let j = 0; j < table.chunks.length; j++) {
+                                                table.chunks[j].summary_embedding = embeddings[j];
+                                            }
+                                        }
+                                    } catch (e) {
+                                        console.error("Failed to generate chunk embeddings for continued table.", e);
+                                    }
+
+                                    // 3. Insert the new chunks linking back to the EXISTING table ID
+                                    if (table.chunks && table.chunks.length > 0) {
+                                        await dbService.saveChunks(existingTable.id, docId, table.chunks, i);
+                                    }
+
+                                } else {
+                                    // It's a brand new table
+                                    console.log(`Found NEW table: ${table.table_name}`);
+
+                                    // Use updated schema/notes if provided even on first page (unlikely, but safest)
+                                    if (table.updated_schema_fields) table.schema_fields = table.updated_schema_fields;
+                                    if (table.updated_notes) table.notes = table.updated_notes;
+
+                                    newTablesToSave.push(table);
                                 }
-                            } catch (e) {
-                                console.error("Failed to generate embeddings. Proceeding without them.", e);
                             }
 
-                            await dbService.saveExtractedData(tables, docId, i);
+                            // Now generate embeddings and save only the TRULY new tables
+                            if (newTablesToSave.length > 0) {
+                                try {
+                                    const textsToEmbed: string[] = [];
 
-                            // Increment totalTables state
-                            set((state) => ({ totalTables: state.totalTables + tables.length }));
+                                    // Collect all texts
+                                    for (const table of newTablesToSave) {
+                                        const summaryText = table.summary || "";
+                                        const notesText = table.notes ? `\nNotes: ${table.notes}` : "";
+                                        textsToEmbed.push(summaryText + notesText);
+
+                                        for (const chunk of table.chunks || []) {
+                                            textsToEmbed.push(chunk.text_summary || "");
+                                        }
+                                    }
+
+                                    if (textsToEmbed.length > 0) {
+                                        console.log(`Generating embeddings for ${textsToEmbed.length} items (New Tables)...`);
+                                        const embeddings = await apiService.generateEmbeddings(textsToEmbed);
+
+                                        // Map embeddings back to objects
+                                        let embIndex = 0;
+                                        for (const table of newTablesToSave) {
+                                            table.summary_embedding = embeddings[embIndex++];
+                                            for (const chunk of table.chunks || []) {
+                                                chunk.summary_embedding = embeddings[embIndex++];
+                                            }
+                                        }
+                                    }
+                                } catch (e) {
+                                    console.error("Failed to generate embeddings. Proceeding without them.", e);
+                                }
+
+                                await dbService.saveExtractedData(newTablesToSave, docId, i);
+
+                                // Increment totalTables state ONLY for new tables
+                                set((state) => ({ totalTables: state.totalTables + newTablesToSave.length }));
+                            }
                         }
                     } catch (e) {
                         console.error("AI Extraction failed:", e);

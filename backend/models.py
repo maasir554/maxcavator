@@ -16,6 +16,8 @@ class TableExtraction(BaseModel):
     notes: str                      # extra context or caveats
     schema_fields: List[FieldSchema]  # field definitions with types + descriptions
     chunks: List[ChunkData]         # each row as a separate chunk
+    updated_schema_fields: Optional[List[FieldSchema]] = None # if table is continued and schema improved
+    updated_notes: Optional[str] = None                       # if table is continued and notes improved
 
 class ExtractionRequest(BaseModel):
     text: str

@@ -19,6 +19,8 @@ export interface TableExtraction {
     schema_fields: FieldSchema[];
     chunks: ChunkData[];
     summary_embedding?: number[];
+    updated_schema_fields?: FieldSchema[];
+    updated_notes?: string;
 }
 
 export const apiService = {

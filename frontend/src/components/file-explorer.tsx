@@ -11,6 +11,7 @@ import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { FileText, ChevronLeft, ChevronRight, Loader2, CheckCircle, AlertCircle, PauseCircle, Search } from "lucide-react"
 import { useExtractionStore } from '@/store/extraction-store'
+import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip"
 import { apiService } from '@/services/api-service'
 import { dbService } from '@/services/db-service'
 
@@ -91,15 +92,6 @@ export function FileExplorer({ onSelectFile }: FileExplorerProps) {
         if (currentPage < totalPagesCount) setCurrentPage(currentPage + 1);
     };
 
-    const getIcon = (status: string) => {
-        switch (status) {
-            case 'processing': return <Loader2 className="h-4 w-4 animate-spin text-blue-500" />;
-            case 'completed': return <CheckCircle className="h-4 w-4 text-green-500" />;
-            case 'error': return <AlertCircle className="h-4 w-4 text-red-500" />;
-            case 'paused': return <PauseCircle className="h-4 w-4 text-yellow-500" />;
-            default: return <div className="h-4 w-4" />;
-        }
-    };
 
     return (
         <div className="flex flex-col h-full bg-card border rounded-lg overflow-hidden">
@@ -155,9 +147,9 @@ export function FileExplorer({ onSelectFile }: FileExplorerProps) {
                 <Table>
                     <TableHeader className="bg-muted/50 sticky top-0">
                         <TableRow>
-                            <TableHead className="w-[400px] pl-6">Filename</TableHead>
-                            <TableHead>Status</TableHead>
-                            <TableHead className="text-right pr-6">Pages</TableHead>
+                            <TableHead className="w-full pl-6">Filename</TableHead>
+                            <TableHead className="w-[80px]">Status</TableHead>
+                            <TableHead className="w-[100px] text-right pr-6">Pages</TableHead>
                         </TableRow>
                     </TableHeader>
                     <TableBody>
@@ -174,17 +166,21 @@ export function FileExplorer({ onSelectFile }: FileExplorerProps) {
                                     className="cursor-pointer hover:bg-muted/50"
                                     onClick={() => onSelectFile(job.documentId)}
                                 >
-                                    <TableCell className="font-medium pl-6">
-                                        <div className="flex items-center gap-2 truncate max-w-md">
+                                    <TableCell className="font-medium pl-6 max-w-0">
+                                        <div className="flex items-center gap-2 truncate">
                                             <FileText className="h-4 w-4 text-muted-foreground shrink-0" />
                                             <span className="truncate" title={job.filename}>{job.filename}</span>
                                         </div>
                                     </TableCell>
                                     <TableCell>
-                                        <div className="flex items-center gap-2 capitalize">
-                                            {getIcon(job.status)}
-                                            {job.status}
-                                        </div>
+                                        <Tooltip>
+                                            <TooltipTrigger asChild>
+                                                <div className={`w-2.5 h-2.5 rounded-full ${job.status === 'completed' ? 'bg-green-500' : job.status === 'error' ? 'bg-red-500' : 'bg-yellow-500'}`} />
+                                            </TooltipTrigger>
+                                            <TooltipContent className="max-w-[95vw] wrap-break-word">
+                                                <p className="capitalize">Status: {job.status}</p>
+                                            </TooltipContent>
+                                        </Tooltip>
                                     </TableCell>
                                     <TableCell className="text-right text-muted-foreground pr-6">
                                         {job.processedPages} / {job.totalPages || 1}
