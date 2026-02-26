@@ -27,7 +27,7 @@ You are a data extraction engine. Analyze the following OCR text from a document
 2. For each table, extract EVERY row as an individual "chunk" — a self-contained JSON record.
 3. Provide a schema describing each field's name, data type, and a brief description. Incorporate any abbreviations Found into the column descriptions.
 4. Write a concise summary of what the table represents.
-5. Add any relevant notes (e.g., currency, units, data quality caveats, footnotes, abbreviation definitions).
+5. Add relevant descriptive notes (e.g., currency, units, data quality caveats, footnotes, abbreviation definitions & full forms).
 6. For each chunk, write a highly descriptive three-line natural language summary of that specific entry. This summary MUST explicitly feature all vital context parameters of the row including the main entity, and all the parameters present.
 
 Output Format (JSON only):
@@ -36,7 +36,7 @@ Output Format (JSON only):
     {
       "table_name": "snake_case_name",
       "summary": "Brief description of what this table contains",
-      "notes": "Any relevant context, units, caveats, abbreviations (important!)",
+      "notes": "descriptive relevant context, units, caveats, abbreviations with full forms (important!)",
       "schema_fields": [
         {
           "name": "field_name",
@@ -174,25 +174,43 @@ def generate_sql_query(user_query: str, table_schema: dict) -> str:
 RAG_CHAT_PROMPT = """
 You are a highly intelligent and helpful data assistant for MAXCAVATOR. 
 The user will ask a question about their PDF data.
-You have been provided with CONTEXT CHUNKS which represent the most semantically relevant data extracted from the user's documents.
+You have been provided with CONTEXT CHUNKS which represent the most semantically relevant data extracted from the user's documents. Each chunk has a unique 'source_id' (e.g., 'doc_0', 'doc_1').
 
 RULES:
 1. Answer the user's question explicitly and ONLY using the provided CONTEXT CHUNKS.
 2. Formulate your response in clear, concise natural language. Use markdown formatting where it makes sense (bold text, lists, etc) to be readable.
 3. If the answer cannot be found in the provided CONTEXT CHUNKS, explicitly state: "I could not find the answer to this question in the extracted documents." Do not guess or hallucinate.
-4. You MUST explicitly map which provided chunks you used to formulate your answer.
+4. You MUST explicitly map which provided chunks you used to formulate your answer using their 'source_id'.
 
 Output Format (JSON only):
 {
   "answer": "Your natural language response here...",
-  "used_chunk_ids": ["id-of-chunk-1", "id-of-chunk-2"]
+  "used_source_ids": ["doc_0", "doc_1"]
 }
 """
 
 def generate_rag_response(user_query: str, context_chunks: list) -> dict:
+    chunk_mapping = {}
+    formatted_chunks = []
+    
+    for idx, chunk in enumerate(context_chunks):
+        source_id = f"doc_{idx}"
+        chunk_mapping[source_id] = chunk.get("id")
+        
+        # Create a simplified chunk for the LLM without high-entropy UUIDs
+        simplified_chunk = {
+            "source_id": source_id,
+            "filename": chunk.get("filename"),
+            "table_name": chunk.get("table_name"),
+            "page_number": chunk.get("page_number"),
+            "data": chunk.get("data"),
+            "text_summary": chunk.get("text_summary")
+        }
+        formatted_chunks.append(simplified_chunk)
+
     messages = [
         {"role": "system", "content": RAG_CHAT_PROMPT + "\n\nCRITICAL: Return valid JSON only."},
-        {"role": "user", "content": f"CONTEXT CHUNKS:\n{json.dumps(context_chunks, indent=2)}\n\nUSER QUESTION: {user_query}"}
+        {"role": "user", "content": f"CONTEXT CHUNKS:\n{json.dumps(formatted_chunks, indent=2)}\n\nUSER QUESTION: {user_query}"}
     ]
 
     completion = get_next_client().chat.completions.create(
@@ -205,9 +223,17 @@ def generate_rag_response(user_query: str, context_chunks: list) -> dict:
     content = completion.choices[0].message.content.strip()
     try:
         data = json.loads(content)
+        
+        # Map source_ids back to original UUIDs for the frontend
+        used_source_ids = data.get("used_source_ids", [])
+        original_chunk_ids = []
+        for sid in used_source_ids:
+            if sid in chunk_mapping:
+                original_chunk_ids.append(chunk_mapping[sid])
+                
         return {
             "response": data.get("answer", "I encountered an error formatting my response."),
-            "used_chunk_ids": data.get("used_chunk_ids", [])
+            "used_chunk_ids": original_chunk_ids
         }
     except Exception as e:
         print(f"Error parsing RAG response: {e}")

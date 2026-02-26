@@ -2,7 +2,7 @@
 import { useState, useRef, useEffect } from 'react'
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
-import { Send, Loader2, BookOpen, ChevronDown, ChevronRight, FileText, Plus, Search } from "lucide-react"
+import { Send, Loader2, ChevronDown, FileText, Plus, XCircle, MessageSquare, BookOpen, ChevronRight, Search, X } from "lucide-react"
 import { apiService } from "@/services/api-service"
 import { dbService } from "@/services/db-service"
 import { DocumentViewerModal } from "./document-viewer-modal"
@@ -20,7 +20,6 @@ import {
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from "@/components/ui/dialog"
 import { Checkbox } from "@/components/ui/checkbox"
 import { useExtractionStore } from '@/store/extraction-store'
-import { X, MessageSquare } from "lucide-react"
 
 interface SourceChunk {
     id: string;
@@ -94,32 +93,55 @@ function SourceDropdown({ sources }: { sources: SourceChunk[] }) {
 }
 
 function CitationCapsule({ source }: { source: SourceChunk }) {
+    return (
+        <DocumentViewerModal
+            docId={source.document_id}
+            initialPage={source.page_number}
+            iconOnly={true}
+        >
+            <div className="flex items-center bg-muted/20 border rounded-full pl-2.5 pr-2 py-1 gap-1.5 shrink-0 animate-in fade-in slide-in-from-left-1 cursor-pointer hover:bg-muted/40 transition-colors">
+                <FileText className="w-3 h-3 text-muted-foreground shrink-0" />
+                <span className="text-[11px] font-medium text-muted-foreground truncate max-w-[150px]">
+                    {source.filename}
+                </span>
+                <span className="text-[10px] text-muted-foreground/70 shrink-0 font-medium whitespace-nowrap">
+                    • pg. {source.page_number}
+                </span>
+            </div>
+        </DocumentViewerModal>
+    );
+}
+
+function CitationGroup({ sources }: { sources: SourceChunk[] }) {
     const [isExpanded, setIsExpanded] = useState(false);
+
+    if (!sources || sources.length === 0) return null;
 
     if (!isExpanded) {
         return (
             <button
                 onClick={() => setIsExpanded(true)}
                 className="flex items-center gap-1.5 px-2 py-0.5 rounded-full border bg-muted/40 hover:bg-muted text-[10px] text-muted-foreground transition-colors"
-                title={`Reference: ${source.filename} (Pg ${source.page_number})`}
+                title={`${sources.length} Reference${sources.length > 1 ? 's' : ''}`}
             >
                 <FileText className="w-3 h-3" />
-                <span>See Reference</span>
+                <span>See {sources.length} Reference{sources.length > 1 ? 's' : ''}</span>
             </button>
         );
     }
 
     return (
-        <div className="flex items-center bg-muted/20 border rounded-full pl-2.5 pr-1 py-1 gap-2 shrink-0 animate-in fade-in slide-in-from-left-1">
-            <FileText className="w-3 h-3 text-muted-foreground" />
-            <span className="text-[11px] font-medium text-muted-foreground truncate max-w-[150px]">
-                {source.filename} (Pg {source.page_number})
-            </span>
-            <DocumentViewerModal
-                docId={source.document_id}
-                initialPage={source.page_number}
-                iconOnly={true}
-            />
+        <div className="flex flex-wrap items-center gap-2">
+            <button
+                onClick={() => setIsExpanded(false)}
+                className="text-muted-foreground hover:text-foreground transition-colors"
+                title="Collapse references"
+            >
+                <XCircle className="w-4 h-4" />
+            </button>
+            {sources.map(chunk => (
+                <CitationCapsule key={chunk.id} source={chunk} />
+            ))}
         </div>
     );
 }
@@ -272,16 +294,11 @@ export default function ChatInterface() {
                                     </div>
                                 )}
 
-                                {/* Render explicitly used citations */}
                                 {m.sources && m.used_chunk_ids && m.used_chunk_ids.length > 0 && (
                                     <div className="flex flex-col gap-1.5 mt-1 border-l-2 pl-3 border-muted-foreground/30">
-                                        <div className="flex flex-wrap gap-2">
-                                            {m.used_chunk_ids.map(chunkId => {
-                                                const sourceChunk = m.sources?.find(s => s.id === chunkId);
-                                                if (!sourceChunk) return null;
-                                                return <CitationCapsule key={chunkId} source={sourceChunk} />;
-                                            })}
-                                        </div>
+                                        <CitationGroup
+                                            sources={m.used_chunk_ids.map(id => m.sources?.find(s => s.id === id)).filter((s): s is SourceChunk => !!s)}
+                                        />
                                     </div>
                                 )}
 

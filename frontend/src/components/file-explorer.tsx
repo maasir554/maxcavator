@@ -9,7 +9,7 @@ import {
 } from "@/components/ui/table"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
-import { FileText, ChevronLeft, ChevronRight, Loader2, CheckCircle, AlertCircle, PauseCircle, Search } from "lucide-react"
+import { FileText, ChevronLeft, ChevronRight, Loader2, Search } from "lucide-react"
 import { useExtractionStore } from '@/store/extraction-store'
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip"
 import { apiService } from '@/services/api-service'

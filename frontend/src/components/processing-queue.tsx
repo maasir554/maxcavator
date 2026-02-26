@@ -5,7 +5,7 @@ import { useExtractionStore } from '@/store/extraction-store';
 import { Progress } from "@/components/ui/progress"
 import { ScrollArea } from "@/components/ui/scroll-area"
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip"
-import { FileText, Loader2, CheckCircle, AlertCircle, PauseCircle, Play, X, ChevronDown, ChevronUp } from 'lucide-react'
+import { FileText, Play, X, ChevronDown, ChevronUp } from 'lucide-react'
 import { Button } from "@/components/ui/button"
 import * as React from 'react'
 

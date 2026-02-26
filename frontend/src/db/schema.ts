@@ -25,7 +25,8 @@ CREATE TABLE IF NOT EXISTS pdf_tables (
   schema_json JSONB NOT NULL,
   summary_embedding vector(3072),
   page_number INT,
-  created_at TIMESTAMP DEFAULT NOW()
+  created_at TIMESTAMP DEFAULT NOW(),
+  updated_at TIMESTAMP DEFAULT NOW()
 );
 
 CREATE TABLE IF NOT EXISTS chunks (
@@ -43,6 +44,11 @@ CREATE TABLE IF NOT EXISTS chunks (
 -- Migrations for existing databases
 DO $$ BEGIN
   ALTER TABLE documents ADD COLUMN updated_at TIMESTAMP DEFAULT NOW();
+EXCEPTION WHEN duplicate_column THEN NULL;
+END $$;
+
+DO $$ BEGIN
+  ALTER TABLE pdf_tables ADD COLUMN updated_at TIMESTAMP DEFAULT NOW();
 EXCEPTION WHEN duplicate_column THEN NULL;
 END $$;
 
