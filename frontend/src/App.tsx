@@ -5,10 +5,11 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
 import DataExplorer from "@/components/data-explorer"
 import ChatInterface from "@/components/chat-interface"
+import AgentInterface from "@/components/agent-interface"
 import TrashView from "@/components/trash-view"
 import { FileExplorer } from "@/components/file-explorer"
 import { FileDetailsView } from "@/components/file-details-view"
-import { FileText, Database, Clock, Loader2, Trash2 } from "lucide-react"
+import { FileText, Database, Clock, Loader2, Trash2, Bot } from "lucide-react"
 
 import { useExtractionStore } from '@/store/extraction-store'
 
@@ -46,9 +47,10 @@ function App() {
   }
 
   const activeTab = location.startsWith('/chat') ? 'chat'
-    : location.startsWith('/data') ? 'data'
-      : location.startsWith('/trash') ? 'trash'
-        : 'dashboard';
+    : location.startsWith('/agent') ? 'agent'
+      : location.startsWith('/data') ? 'data'
+        : location.startsWith('/trash') ? 'trash'
+          : 'dashboard';
 
   return (
     <LayoutShell>
@@ -61,7 +63,10 @@ function App() {
           <div className={`transition-all duration-300 origin-top-left ${isScrolled ? 'mb-2 scale-90 opacity-80' : 'mb-4 scale-100 opacity-100'}`}>
             <TabsList className="transition-all duration-300">
               <TabsTrigger value="dashboard" className="transition-all duration-300">Overview</TabsTrigger>
-              <TabsTrigger value="chat" className="transition-all duration-300">Chat</TabsTrigger>
+              <TabsTrigger value="chat" className="transition-all duration-300">Chat & RAG</TabsTrigger>
+              <TabsTrigger value="agent" className="transition-all duration-300 gap-1.5 font-medium text-indigo-600 dark:text-indigo-400">
+                <Bot className="w-3.5 h-3.5" /> Agent
+              </TabsTrigger>
               <TabsTrigger value="data" className="transition-all duration-300">Data Explorer</TabsTrigger>
               <TabsTrigger value="trash" className="gap-1.5 transition-all duration-300">
                 <Trash2 className={`transition-all duration-300 ${isScrolled ? 'h-3 w-3' : 'h-3.5 w-3.5'}`} />
@@ -163,6 +168,12 @@ function App() {
         <TabsContent value="chat" className="flex-1 h-full overflow-hidden">
           <div className="h-full border rounded-md overflow-hidden">
             <ChatInterface />
+          </div>
+        </TabsContent>
+
+        <TabsContent value="agent" className="flex-1 h-full overflow-hidden">
+          <div className="h-full border border-indigo-500/30 rounded-md overflow-hidden shadow-lg shadow-indigo-500/10">
+            <AgentInterface />
           </div>
         </TabsContent>
 

@@ -91,5 +91,26 @@ export const apiService = {
         if (!res.ok) throw new Error("Failed to generate RAG response");
         const data = await res.json();
         return { response: data.response, used_chunk_ids: data.used_chunk_ids || [] };
+    },
+
+    async getAgentPlan(userQuery: string, chatHistory?: any[]): Promise<{ intent: string, sub_queries: string[], direct_response?: string }> {
+        const res = await fetch(`${API_URL}/agent/plan`, {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ user_query: userQuery, chat_history: chatHistory }),
+        });
+        if (!res.ok) throw new Error("Agent Plan generation failed");
+        return await res.json();
+    },
+
+    async getAgentAnswer(userQuery: string, retrievedChunks: any[], chatHistory?: any[]): Promise<{ response: string, used_chunk_ids: string[] }> {
+        const res = await fetch(`${API_URL}/agent/answer`, {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ user_query: userQuery, retrieved_chunks: retrievedChunks, chat_history: chatHistory }),
+        });
+        if (!res.ok) throw new Error("Agent Answer generation failed");
+        const data = await res.json();
+        return { response: data.response, used_chunk_ids: data.used_chunk_ids || [] };
     }
 };

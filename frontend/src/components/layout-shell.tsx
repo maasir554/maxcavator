@@ -6,7 +6,7 @@ import { Sheet, SheetContent, SheetTrigger } from "@/components/ui/sheet"
 import { Separator } from "@/components/ui/separator"
 import {
     Menu, FileText, Database, MessageSquare,
-    Activity, ChevronsLeft, ChevronsRight, ExternalLink, Copy
+    Activity, ChevronsLeft, ChevronsRight, ExternalLink, Copy, Bot
 } from "lucide-react"
 import { NewPdfModal } from "@/components/new-pdf-modal"
 import { ProcessingQueue } from "@/components/processing-queue"
@@ -21,6 +21,8 @@ interface SidebarProps {
 }
 
 export function Sidebar({ className, collapsed = false, onToggleCollapse }: SidebarProps) {
+    const [, setLocation] = useLocation();
+
     return (
         <div className={`pb-12 border-r bg-background h-screen flex flex-col transition-all duration-200 ease-in-out ${collapsed ? 'w-14' : 'w-60'} ${className ?? ''}`}>
             <div className="flex-1 flex flex-col overflow-hidden">
@@ -34,11 +36,15 @@ export function Sidebar({ className, collapsed = false, onToggleCollapse }: Side
 
                 {/* Nav */}
                 <div className={`py-3 space-y-1 ${collapsed ? 'px-1.5' : 'px-3'}`}>
-                    <Button variant="ghost" className={`w-full ${collapsed ? 'justify-center px-0' : 'justify-start'}`} title="Chat Assistant">
+                    <Button variant="ghost" className={`w-full ${collapsed ? 'justify-center px-0' : 'justify-start'}`} title="Chat Assistant" onClick={() => setLocation('/chat')}>
                         <MessageSquare className="h-4 w-4 shrink-0" />
-                        {!collapsed && <span className="ml-2 truncate">Chat Assistant</span>}
+                        {!collapsed && <span className="ml-2 truncate">Chat & RAG</span>}
                     </Button>
-                    <Button variant="ghost" className={`w-full ${collapsed ? 'justify-center px-0' : 'justify-start'}`} title="Data Explorer">
+                    <Button variant="ghost" className={`w-full text-indigo-600 dark:text-indigo-400 font-medium bg-indigo-500/5 hover:bg-indigo-500/15 ${collapsed ? 'justify-center px-0' : 'justify-start'}`} title="AI Agent" onClick={() => setLocation('/agent')}>
+                        <Bot className="h-4 w-4 shrink-0" />
+                        {!collapsed && <span className="ml-2 truncate">AI Agent</span>}
+                    </Button>
+                    <Button variant="ghost" className={`w-full ${collapsed ? 'justify-center px-0' : 'justify-start'}`} title="Data Explorer" onClick={() => setLocation('/data')}>
                         <Database className="h-4 w-4 shrink-0" />
                         {!collapsed && <span className="ml-2 truncate">Data Explorer</span>}
                     </Button>

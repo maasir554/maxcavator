@@ -372,6 +372,10 @@ export const useExtractionStore = create<ExtractionState>((set, get) => ({
 
                         // Update document in DB with title (filename) and summary
                         await dbService.updateDocumentTitleAndSummary(docId, documentName, summary, nameEmbedding);
+
+                        // Instantly update the UI name
+                        updateJob(docId, { filename: documentName });
+
                         // Only generate once
                         firstPagesText.length = 0;
                     } catch (e) {

@@ -54,3 +54,22 @@ class RagRequest(BaseModel):
 class RagResponse(BaseModel):
     response: str
     used_chunk_ids: List[str]
+
+# Agentic Flow Models
+class AgentPlanRequest(BaseModel):
+    user_query: str
+    chat_history: Optional[List[Dict[str, str]]] = None
+
+class AgentPlanResponse(BaseModel):
+    intent: str # 'data_lookup' or 'general_chat'
+    sub_queries: List[str] # specific search strings to run against vector DB
+    direct_response: Optional[str] = None # if general_chat, the immediate answer
+
+class AgentAnswerRequest(BaseModel):
+    user_query: str
+    retrieved_chunks: List[Dict] # raw chunks from DB semantic search
+    chat_history: Optional[List[Dict[str, str]]] = None
+
+class AgentAnswerResponse(BaseModel):
+    response: str
+    used_chunk_ids: List[str]

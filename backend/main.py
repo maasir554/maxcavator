@@ -69,6 +69,26 @@ def rag_chat(request: RagRequest):
         used_chunk_ids=result.get("used_chunk_ids", [])
     )
 
+from models import AgentPlanRequest, AgentPlanResponse, AgentAnswerRequest, AgentAnswerResponse
+from agent import generate_agent_plan, generate_agent_answer
+
+@app.post("/agent/plan", response_model=AgentPlanResponse)
+def agent_plan(request: AgentPlanRequest):
+    result = generate_agent_plan(request.user_query, request.chat_history)
+    return AgentPlanResponse(
+        intent=result.get("intent", "data_lookup"),
+        sub_queries=result.get("sub_queries", []),
+        direct_response=result.get("direct_response")
+    )
+
+@app.post("/agent/answer", response_model=AgentAnswerResponse)
+def agent_answer(request: AgentAnswerRequest):
+    result = generate_agent_answer(request.user_query, request.retrieved_chunks, request.chat_history)
+    return AgentAnswerResponse(
+        response=result.get("response", ""),
+        used_chunk_ids=result.get("used_chunk_ids", [])
+    )
+
 from fastapi import Response
 import requests
 
