@@ -73,3 +73,37 @@ class AgentAnswerRequest(BaseModel):
 class AgentAnswerResponse(BaseModel):
     response: str
     used_chunk_ids: List[str]
+
+
+
+# Orchestrator V2 Models (modular pipeline)
+
+class OrchestratorV2ClassifyRequest(BaseModel):
+    user_query: str
+    chat_history: Optional[List[Dict[str, str]]] = None
+
+class OrchestratorV2ClassifyResponse(BaseModel):
+    intent: str  # general_chat, data_lookup, meta_query, math
+    sub_queries: List[str] = []
+    direct_response: Optional[str] = None
+    math_ops: Optional[List[Dict[str, Any]]] = []
+
+class OrchestratorV2AnalyzeRequest(BaseModel):
+    user_query: str
+    chunks: List[Dict[str, Any]]  # raw chunks with source_ids
+    intent: Optional[str] = None
+    sub_queries: Optional[List[str]] = None
+
+class OrchestratorV2AnalyzeResponse(BaseModel):
+    assessments: List[Dict[str, Any]]  # {source_id, keep, reason}
+
+class OrchestratorV2SynthesizeRequest(BaseModel):
+    user_query: str
+    curated_chunks: List[Dict[str, Any]]
+    chat_history: Optional[List[Dict[str, str]]] = None
+    prior_sources: Optional[List[Dict[str, Any]]] = None  # sources from previous messages for follow-ups
+
+class OrchestratorV2SynthesizeResponse(BaseModel):
+    response: str
+    used_source_ids: List[str] = []
+

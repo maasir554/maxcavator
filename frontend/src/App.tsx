@@ -6,10 +6,11 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
 import DataExplorer from "@/components/data-explorer"
 import ChatInterface from "@/components/chat-interface"
 import AgentInterface from "@/components/agent-interface"
+import OrchestratorInterface from "@/components/orchestrator-interface"
 import TrashView from "@/components/trash-view"
 import { FileExplorer } from "@/components/file-explorer"
 import { FileDetailsView } from "@/components/file-details-view"
-import { FileText, Database, Clock, Loader2, Trash2, Bot } from "lucide-react"
+import { FileText, Database, Clock, Loader2, Trash2, Bot, Zap } from "lucide-react"
 
 import { useExtractionStore } from '@/store/extraction-store'
 
@@ -48,9 +49,10 @@ function App() {
 
   const activeTab = location.startsWith('/chat') ? 'chat'
     : location.startsWith('/agent') ? 'agent'
-      : location.startsWith('/data') ? 'data'
-        : location.startsWith('/trash') ? 'trash'
-          : 'dashboard';
+      : location.startsWith('/orchestrator') ? 'orchestrator'
+        : location.startsWith('/data') ? 'data'
+          : location.startsWith('/trash') ? 'trash'
+            : 'dashboard';
 
   return (
     <LayoutShell>
@@ -66,6 +68,9 @@ function App() {
               <TabsTrigger value="chat" className="transition-all duration-300">Chat & RAG</TabsTrigger>
               <TabsTrigger value="agent" className="transition-all duration-300 gap-1.5 font-medium text-indigo-600 dark:text-indigo-400">
                 <Bot className="w-3.5 h-3.5" /> Agent
+              </TabsTrigger>
+              <TabsTrigger value="orchestrator" className="transition-all duration-300 gap-1.5 font-medium text-purple-600 dark:text-purple-400">
+                <Zap className="w-3.5 h-3.5" /> Orchestrator
               </TabsTrigger>
               <TabsTrigger value="data" className="transition-all duration-300">Data Explorer</TabsTrigger>
               <TabsTrigger value="trash" className="gap-1.5 transition-all duration-300">
@@ -174,6 +179,12 @@ function App() {
         <TabsContent value="agent" className="flex-1 h-full overflow-hidden">
           <div className="h-full border border-indigo-500/30 rounded-md overflow-hidden shadow-lg shadow-indigo-500/10">
             <AgentInterface />
+          </div>
+        </TabsContent>
+
+        <TabsContent value="orchestrator" className="flex-1 h-full overflow-hidden">
+          <div className="h-full border border-purple-500/30 rounded-md overflow-hidden shadow-lg shadow-purple-500/10">
+            <OrchestratorInterface />
           </div>
         </TabsContent>
 

@@ -339,6 +339,47 @@ export const dbService = {
         return res.rows;
     },
 
+    // Table → Chunk search: skip document hierarchy, find top tables by embedding, get chunks from those
+    async semanticTableChunkSearch(queryEmbedding: number[], limit: number = 5, focusedDocumentIds?: string[]): Promise<any[]> {
+        const db = getDb();
+        const embStr = JSON.stringify(queryEmbedding);
+
+        let filterClause = "";
+        if (focusedDocumentIds && focusedDocumentIds.length > 0) {
+            const idsStr = focusedDocumentIds.map(id => `'${id}'`).join(',');
+            filterClause = ` AND d.id IN (${idsStr})`;
+        }
+
+        const res = await db.query(`
+            WITH top_tables AS (
+                SELECT pt.id
+                FROM pdf_tables pt
+                JOIN documents d ON pt.document_id = d.id
+                WHERE d.deleted_at IS NULL AND pt.summary_embedding IS NOT NULL ${filterClause}
+                ORDER BY pt.summary_embedding <=> $1
+                LIMIT 5
+            )
+            SELECT
+                c.id,
+                c.document_id,
+                c.page_number,
+                c.data,
+                c.text_summary,
+                pt.table_name,
+                d.filename,
+                1 - (c.summary_embedding <=> $1) as similarity_score
+            FROM chunks c
+            JOIN top_tables tt ON c.pdf_table_id = tt.id
+            JOIN pdf_tables pt ON c.pdf_table_id = pt.id
+            JOIN documents d ON c.document_id = d.id
+            WHERE d.deleted_at IS NULL AND c.summary_embedding IS NOT NULL
+            ORDER BY similarity_score DESC
+            LIMIT $2;
+        `, [embStr, limit]);
+
+        return res.rows;
+    },
+
     async topDownSemanticSearch(queryEmbedding: number[], limit: number = 5, focusedDocumentIds?: string[]): Promise<any[]> {
         const db = getDb();
         const embStr = JSON.stringify(queryEmbedding);

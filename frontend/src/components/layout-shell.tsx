@@ -6,7 +6,7 @@ import { Sheet, SheetContent, SheetTrigger } from "@/components/ui/sheet"
 import { Separator } from "@/components/ui/separator"
 import {
     Menu, FileText, Database, MessageSquare,
-    Activity, ChevronsLeft, ChevronsRight, ExternalLink, Copy, Bot
+    Activity, ChevronsLeft, ChevronsRight, ExternalLink, Copy, Bot, Zap
 } from "lucide-react"
 import { NewPdfModal } from "@/components/new-pdf-modal"
 import { ProcessingQueue } from "@/components/processing-queue"
@@ -47,6 +47,10 @@ export function Sidebar({ className, collapsed = false, onToggleCollapse }: Side
                     <Button variant="ghost" className={`w-full ${collapsed ? 'justify-center px-0' : 'justify-start'}`} title="Data Explorer" onClick={() => setLocation('/data')}>
                         <Database className="h-4 w-4 shrink-0" />
                         {!collapsed && <span className="ml-2 truncate">Data Explorer</span>}
+                    </Button>
+                    <Button variant="ghost" className={`w-full text-purple-600 dark:text-purple-400 font-medium bg-purple-500/5 hover:bg-purple-500/15 ${collapsed ? 'justify-center px-0' : 'justify-start'}`} title="Orchestrator" onClick={() => setLocation('/orchestrator')}>
+                        <Zap className="h-4 w-4 shrink-0" />
+                        {!collapsed && <span className="ml-2 truncate">Orchestrator</span>}
                     </Button>
                     <Sheet>
                         <SheetTrigger asChild>

@@ -112,5 +112,56 @@ export const apiService = {
         if (!res.ok) throw new Error("Agent Answer generation failed");
         const data = await res.json();
         return { response: data.response, used_chunk_ids: data.used_chunk_ids || [] };
+    },
+
+
+
+    // --- Orchestrator V2 modular pipeline ---
+
+    async orchestratorClassify(userQuery: string, chatHistory?: any[]): Promise<{
+        intent: string;
+        sub_queries: string[];
+        direct_response?: string;
+        math_ops: { op: string; a: string; b: string }[];
+    }> {
+        const res = await fetch(`${API_URL}/orchestrator/v2/classify`, {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ user_query: userQuery, chat_history: chatHistory }),
+        });
+        if (!res.ok) throw new Error("Orchestrator classify failed");
+        return await res.json();
+    },
+
+    async orchestratorAnalyze(userQuery: string, chunks: any[], intent?: string, subQueries?: string[]): Promise<{
+        assessments: { source_id: string; keep: boolean; reason: string }[];
+    }> {
+        const res = await fetch(`${API_URL}/orchestrator/v2/analyze`, {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ user_query: userQuery, chunks, intent, sub_queries: subQueries }),
+        });
+        if (!res.ok) throw new Error("Orchestrator analyze failed");
+        return await res.json();
+    },
+
+    async orchestratorSynthesize(
+        userQuery: string,
+        curatedChunks: any[],
+        chatHistory?: any[],
+        priorSources?: any[]
+    ): Promise<{ response: string; used_source_ids: string[] }> {
+        const res = await fetch(`${API_URL}/orchestrator/v2/synthesize`, {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({
+                user_query: userQuery,
+                curated_chunks: curatedChunks,
+                chat_history: chatHistory,
+                prior_sources: priorSources,
+            }),
+        });
+        if (!res.ok) throw new Error("Orchestrator synthesize failed");
+        return await res.json();
     }
 };
