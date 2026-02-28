@@ -94,9 +94,23 @@ def agent_answer(request: AgentAnswerRequest):
 from models import (
     OrchestratorV2ClassifyRequest, OrchestratorV2ClassifyResponse,
     OrchestratorV2AnalyzeRequest, OrchestratorV2AnalyzeResponse,
-    OrchestratorV2SynthesizeRequest, OrchestratorV2SynthesizeResponse
+    OrchestratorV2SynthesizeRequest, OrchestratorV2SynthesizeResponse,
+    OrchestratorControllerRequest, OrchestratorControllerResponse
 )
-from orchestrator import orchestrator_classify, orchestrator_analyze, orchestrator_synthesize
+from orchestrator import orchestrator_classify, orchestrator_analyze, orchestrator_synthesize, orchestrator_controller
+
+@app.post("/orchestrator/controller", response_model=OrchestratorControllerResponse)
+def orch_controller(request: OrchestratorControllerRequest):
+    result = orchestrator_controller(
+        request.user_query,
+        request.chat_history,
+        request.accumulator,
+        request.search_count,
+        request.time_elapsed_ms,
+        request.collected_chunks_summary
+    )
+    return OrchestratorControllerResponse(**result)
+
 
 @app.post("/orchestrator/v2/classify", response_model=OrchestratorV2ClassifyResponse)
 def orch_v2_classify(request: OrchestratorV2ClassifyRequest):

@@ -3,6 +3,109 @@ from typing import Dict, Any, List, Optional
 from extraction import get_next_client
 
 # ==============================================================================
+# Phase 0: Controller Agent — decides next actions autonomously
+# ==============================================================================
+
+CONTROLLER_PROMPT = """You are the Maxcavator Orchestrator Controller, an autonomous AI agent.
+Your job is to decide the NEXT BEST ACTION to answer the user's query, using a set of available tools.
+You have access to a continuous loop. On each turn, you examine what has been done so far (the Accumulator), how much time has passed, how many searches have been executed, and the summary of currently collected data.
+
+AVAILABLE ACTIONS:
+- "search_tier_1": Search documents starting from PDF level down to chunks. Best for broad searches or finding specific tables.
+  - Required Input: { "query": "specific search string" }
+- "search_tier_2": Search at the table and chunk level. Best for finding data within tables.
+  - Required Input: { "query": "specific search string" }
+- "search_tier_3": Search flat text chunks only. Best for unstructured data lookups.
+  - Required Input: { "query": "specific search string" }
+- "get_nearby_rows": Fetch adjacent rows for a specific chunk/row to get context up or down.
+  - Required Input: { "chunk_id": 1, "direction": "up" | "down" | "both", "count": 5 } (Use the mapped integer ID of the chunk)
+- "get_table_info": Fetch the summary, notes, and full schema for a specific table id.
+  - Required Input: { "table_id": 2 } (Use the mapped integer ID of the pdf_table)
+- "analyze_chunks": Filter the collected chunks for relevance to the user's intent. Do this before synthesizing if you have collected many chunks.
+  - Required Input: {} (No input needed, it uses the current collected_chunks)
+- "math": Execute arithmetic operations.
+  - Required Input: { "op": "add" | "subtract" | "multiply", "a": "number1", "b": "number2" }
+- "meta_query": Fetch database metadata (what documents and tables exist).
+  - Required Input: {}
+- "synthesize": Generate the final answer using the collected chunks and end the loop. Use this when you have enough information to answer the user's query.
+  - Required Input: {}
+- "general_chat": Respond directly to the user (e.g., greetings, general questions not requiring data) and end the loop.
+  - Required Input: { "response": "your direct response" }
+
+CRITICAL RULES:
+- Break complex queries into multiple simple search actions if needed.
+- If you have executed searches but the collected chunks don't seem to contain the answer, try a different search string or a different search tier.
+- Be mindful of search counts and time elapsed. If you hit a dead end, use "synthesize" to tell the user what you found and what is missing.
+- When doing math, DO NOT do it yourself. ALWAYS use the "math" action.
+- You must ONLY output a valid JSON object with EXACTLY two keys: "action" and "action_input".
+
+Respond ONLY in JSON. Example:
+{
+  "action": "search_tier_1",
+  "action_input": {
+    "query": "total revenue 2023"
+  }
+}
+"""
+
+def orchestrator_controller(
+    user_query: str,
+    chat_history: Optional[List[Dict[str, str]]] = None,
+    accumulator: str = "",
+    search_count: int = 0,
+    time_elapsed_ms: int = 0,
+    collected_chunks_summary: str = ""
+) -> Dict[str, Any]:
+    messages = [{"role": "system", "content": CONTROLLER_PROMPT}]
+    
+    if chat_history:
+        for msg in chat_history[-4:]:
+            messages.append({"role": msg["role"], "content": msg["content"]})
+            
+    # Build the current state context for the agent
+    state_context = f"User Query: {user_query}\n\n"
+    state_context += f"--- CURRENT EXECUTION STATE ---\n"
+    state_context += f"Time Elapsed: {time_elapsed_ms}ms\n"
+    state_context += f"Searches Executed: {search_count}\n"
+    if collected_chunks_summary:
+        state_context += f"\nCurrently Collected Chunks Summary:\n{collected_chunks_summary}\n"
+    else:
+        state_context += "\nCurrently Collected Chunks Summary: None\n"
+        
+    if accumulator:
+        state_context += f"\nAccumulator (What has happened so far):\n{accumulator}\n"
+    else:
+        state_context += "\nAccumulator: No actions taken yet.\n"
+        
+    state_context += "\nBased on the above state, what is the NEXT BEST ACTION? Respond in JSON."
+    
+    messages.append({"role": "user", "content": state_context})
+
+    try:
+        completion = get_next_client().chat.completions.create(
+            model="openai/gpt-oss-120b",
+            messages=messages,
+            temperature=0.1,
+            response_format={"type": "json_object"}
+        )
+        data = json.loads(completion.choices[0].message.content)
+        
+        action = data.get("action", "synthesize")
+        action_input = data.get("action_input", {})
+        
+        return {
+            "action": action,
+            "action_input": action_input
+        }
+    except Exception as e:
+        print(f"Orchestrator controller error: {e}")
+        return {
+            "action": "synthesize",
+            "action_input": {}
+        }
+
+
+# ==============================================================================
 # Phase 1: Intent Router — classifies user intent, generates search queries
 # ==============================================================================
 

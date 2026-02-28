@@ -1,17 +1,20 @@
 import { useState, useRef, useEffect } from 'react'
 import { Button } from "@/components/ui/button"
-import { Input } from "@/components/ui/input"
-import { Sparkles, Loader2, ChevronDown, FileText, Search, XCircle, Bot, Database } from "lucide-react"
+import { AutoResizeTextarea } from "@/components/ui/auto-resize-textarea"
+import { Sparkles, Loader2, ChevronDown, FileText, Search, XCircle, Bot, Database, ArrowUp, MessageSquare, Plus, X } from "lucide-react"
 import { apiService } from "@/services/api-service"
 import { dbService } from "@/services/db-service"
 import { DocumentViewerModal } from "./document-viewer-modal"
 import ReactMarkdown from 'react-markdown'
 import remarkGfm from 'remark-gfm'
+import { useLocation, useSearch } from "wouter"
+import { DocumentSelectionModal } from "./document-selection-modal"
+import { useExtractionStore } from "@/store/extraction-store"
 import {
     DropdownMenu,
     DropdownMenuContent,
+    DropdownMenuCheckboxItem,
     DropdownMenuItem,
-    DropdownMenuLabel,
     DropdownMenuSeparator,
     DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu"
@@ -223,6 +226,43 @@ export default function AgentInterface() {
     // TopDown search controls whether to use DB entirely or fallback RAG
     const [isTopDownMode, setIsTopDownMode] = useState(true);
 
+    const [focusModalOpen, setFocusModalOpen] = useState(false);
+    const jobs = useExtractionStore(state => state.jobs);
+    const focusedIds = useExtractionStore(state => state.focusedDocumentIds);
+    const setFocusedIds = useExtractionStore(state => state.setFocusedDocumentIds);
+
+    const [location, setLocation] = useLocation();
+    const searchString = useSearch();
+
+    // Sync FROM url TO state
+    useEffect(() => {
+        const params = new URLSearchParams(searchString);
+        const docs = params.get('focus_docs');
+        if (docs !== null) {
+            const ids = docs.split(',').filter(Boolean);
+            if (ids.join(',') !== focusedIds.join(',')) {
+                setFocusedIds(ids);
+            }
+        }
+    }, [searchString, setFocusedIds]);
+
+    // Sync FROM state TO url
+    useEffect(() => {
+        const params = new URLSearchParams(searchString);
+        const currentDocs = params.get('focus_docs');
+        const desiredDocs = focusedIds.length > 0 ? focusedIds.join(',') : null;
+
+        if (desiredDocs !== currentDocs) {
+            if (desiredDocs) {
+                params.set('focus_docs', desiredDocs);
+            } else {
+                params.delete('focus_docs');
+            }
+            const newSearch = params.toString();
+            setLocation(location.split('?')[0] + (newSearch ? '?' + newSearch : ''), { replace: true });
+        }
+    }, [focusedIds, location, searchString, setLocation]);
+
     const scrollRef = useRef<HTMLDivElement>(null);
 
     useEffect(() => {
@@ -277,12 +317,14 @@ export default function AgentInterface() {
 
                 if (!queryEmbedding || queryEmbedding.length === 0) continue;
 
-                // For simplicity, search across all documents (no focus mode for agent yet)
+                // Execute semantic search restricted to focus mode if active
                 let chunks = [];
-                if (isTopDownMode) {
-                    chunks = await dbService.topDownSemanticSearch(queryEmbedding[0], 5, []);
+                const effectiveTopDownMode = isTopDownMode && focusedIds.length === 0;
+
+                if (effectiveTopDownMode) {
+                    chunks = await dbService.topDownSemanticSearch(queryEmbedding[0], 5, focusedIds);
                 } else {
-                    chunks = await dbService.semanticChunkSearch(queryEmbedding[0], 5, []);
+                    chunks = await dbService.semanticChunkSearch(queryEmbedding[0], 5, focusedIds);
                 }
 
                 allChunks = [...allChunks, ...chunks];
@@ -441,66 +483,150 @@ export default function AgentInterface() {
                 </div>
             </div>
 
-            <div className="p-4 border-t border-indigo-100 dark:border-indigo-500/20 bg-white/90 dark:bg-slate-950/90 backdrop-blur-md sticky bottom-0 z-20">
+            <div className={`p-4 border-t bg-background/80 backdrop-blur-sm sticky bottom-0 z-10 ${focusedIds.length > 0 ? 'border-indigo-200 dark:border-indigo-900 bg-indigo-50/30 dark:bg-indigo-950/20' : ''}`}>
                 <div className="max-w-3xl mx-auto flex flex-col gap-3 relative">
-                    <form
-                        onSubmit={(e) => {
-                            e.preventDefault();
-                            handleSend();
-                        }}
-                        className="relative flex items-center"
-                    >
-                        <div className="absolute left-3 flex items-center">
-                            <Sparkles className="w-4 h-4 text-indigo-300 dark:text-indigo-500/70" />
+                    {/* Render Focused Document Chips */}
+                    {focusedIds.length > 0 && (
+                        <div className="flex flex-wrap gap-2 px-1">
+                            <span className="text-xs font-semibold uppercase tracking-wider text-indigo-700/80 dark:text-indigo-400/80 flex items-center pr-2">
+                                <MessageSquare className="w-3.5 h-3.5 mr-1" /> Focus Mode:
+                            </span>
+                            {focusedIds.map(fid => {
+                                const docJob = jobs[fid];
+                                if (!docJob) return null;
+                                return (
+                                    <div key={fid} className="flex items-center gap-0 bg-indigo-100/50 dark:bg-indigo-900/30 text-indigo-800 dark:text-indigo-300 border border-indigo-200/60 dark:border-indigo-800/60 rounded-full pl-1 pr-1 py-0.5 text-xs font-medium relative group shadow-sm transition-all hover:bg-indigo-100 dark:hover:bg-indigo-900/50 hover:border-indigo-300 dark:hover:border-indigo-700">
+                                        <DocumentViewerModal docId={fid}>
+                                            <div className="flex items-center gap-1.5 pl-1.5 pr-1 cursor-pointer hover:underline decoration-indigo-300 dark:decoration-indigo-700 underline-offset-2">
+                                                <FileText className="w-3 h-3 text-indigo-500 dark:text-indigo-400" />
+                                                <span className="truncate max-w-[150px]">{docJob.filename}</span>
+                                            </div>
+                                        </DocumentViewerModal>
+                                        <div className="h-3.5 w-px bg-indigo-200/60 dark:bg-indigo-800/60 mx-1" />
+                                        <Button
+                                            variant="ghost"
+                                            size="icon"
+                                            className="h-5 w-5 rounded-full hover:bg-indigo-200 dark:hover:bg-indigo-800 hover:text-indigo-900 dark:hover:text-indigo-100 shrink-0 transition-colors"
+                                            onClick={(e) => {
+                                                e.stopPropagation();
+                                                setFocusedIds(focusedIds.filter(id => id !== fid));
+                                            }}
+                                        >
+                                            <X className="w-3 h-3" />
+                                        </Button>
+                                    </div>
+                                );
+                            })}
                         </div>
-                        <Input
-                            placeholder="Ask the Agent to analyze your data..."
-                            value={input}
-                            onChange={(e) => setInput(e.target.value)}
-                            disabled={agentState !== 'idle'}
-                            className="pr-24 pl-10 py-6 rounded-2xl bg-white dark:bg-indigo-950/20 border-indigo-200 dark:border-indigo-500/30 focus-visible:ring-indigo-500/50 shadow-inner text-indigo-900 dark:text-indigo-100 placeholder:text-indigo-400/60 dark:placeholder:text-indigo-300/40"
-                        />
-                        <div className="absolute right-2 flex items-center gap-1">
-                            <DropdownMenu>
-                                <DropdownMenuTrigger asChild>
-                                    <Button type="button" variant="ghost" size="icon" className="h-9 w-9 text-indigo-500 dark:text-indigo-400 hover:text-indigo-700 dark:hover:text-indigo-300 hover:bg-indigo-50 dark:hover:bg-indigo-500/20 rounded-xl" title="Search Settings">
-                                        <Database className="h-4 w-4" />
-                                    </Button>
-                                </DropdownMenuTrigger>
-                                <DropdownMenuContent align="end" className="w-[220px] border-indigo-200 dark:border-indigo-500/20 bg-white dark:bg-slate-950 text-indigo-900 dark:text-indigo-100">
-                                    <DropdownMenuLabel>Agent Settings</DropdownMenuLabel>
-                                    <DropdownMenuSeparator className="bg-indigo-100 dark:bg-indigo-500/20" />
-                                    <DropdownMenuItem className="focus:bg-indigo-50 dark:focus:bg-indigo-500/20 focus:text-indigo-900 dark:focus:text-indigo-100 p-0">
-                                        <label className="flex items-center w-full px-2 py-1.5 cursor-pointer">
-                                            <input
-                                                type="checkbox"
-                                                checked={isTopDownMode}
-                                                onChange={(e) => setIsTopDownMode(e.target.checked)}
-                                                className="mr-2 accent-indigo-500"
-                                            />
-                                            Top-Down Search
-                                        </label>
-                                    </DropdownMenuItem>
-                                </DropdownMenuContent>
-                            </DropdownMenu>
+                    )}
 
+                    <div className="flex gap-2">
+                        <DropdownMenu>
+                            <DropdownMenuTrigger asChild>
+                                <Button type="button" variant="outline" size="icon" className={`shrink-0 rounded-full h-11 w-11 shadow-sm relative transition-colors ${focusedIds.length > 0 ? 'border-indigo-300 dark:border-indigo-800 text-indigo-600 dark:text-indigo-400 hover:text-indigo-700 dark:hover:text-indigo-300 hover:bg-indigo-50 dark:hover:bg-indigo-900/20' : ''}`}>
+                                    <Plus className="h-5 w-5" />
+                                    {isTopDownMode && focusedIds.length === 0 && (
+                                        <span className="absolute top-0 right-0 -mr-1 -mt-1 flex h-3 w-3">
+                                            <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-indigo-500 opacity-75"></span>
+                                            <span className="relative inline-flex rounded-full h-3 w-3 bg-indigo-500 border-2 border-background"></span>
+                                        </span>
+                                    )}
+                                    {focusedIds.length > 0 && (
+                                        <span className="absolute top-0 right-0 -mr-1 -mt-1 flex h-3 w-3">
+                                            <span className="absolute inline-flex h-full w-full rounded-full bg-indigo-400 opacity-75"></span>
+                                        </span>
+                                    )}
+                                </Button>
+                            </DropdownMenuTrigger>
+                            <DropdownMenuContent align="start" className="w-[240px]">
+                                <div className="px-2 py-1.5 text-sm font-semibold flex items-center gap-2 text-indigo-900 dark:text-indigo-100">
+                                    <MessageSquare className="w-4 h-4 text-indigo-500" />
+                                    Chat Context
+                                </div>
+                                <DropdownMenuItem
+                                    className="cursor-pointer"
+                                    onSelect={(e) => e.preventDefault()} // Prevent closing on click
+                                    onClick={() => setFocusModalOpen(true)}
+                                >
+                                    <div className="flex flex-col gap-1 w-full">
+                                        <span className="font-medium text-indigo-600 dark:text-indigo-400">Select Focus Documents...</span>
+                                        <span className="text-xs text-muted-foreground leading-snug">
+                                            Restrict AI to answer ONLY from specific PDFs.
+                                        </span>
+                                    </div>
+                                </DropdownMenuItem>
+                                <DropdownMenuSeparator />
+                                <div className="px-2 py-1.5 text-sm font-semibold flex items-center gap-2 text-indigo-900 dark:text-indigo-100">
+                                    <Search className="w-4 h-4 text-indigo-500" />
+                                    Search Engine
+                                </div>
+                                <DropdownMenuCheckboxItem
+                                    checked={isTopDownMode && focusedIds.length === 0}
+                                    onCheckedChange={setIsTopDownMode}
+                                    disabled={focusedIds.length > 0}
+                                    className="cursor-pointer"
+                                >
+                                    <div className={`flex flex-col gap-1 ${focusedIds.length > 0 ? 'opacity-50' : ''}`}>
+                                        <span className="font-medium">Top-Down Mode</span>
+                                        <span className="text-xs text-muted-foreground leading-snug">
+                                            {focusedIds.length > 0
+                                                ? "Disabled in Focus Mode (using direct local search)."
+                                                : "Enables hierarchical vector search for complex queries."}
+                                        </span>
+                                    </div>
+                                </DropdownMenuCheckboxItem>
+                            </DropdownMenuContent>
+                        </DropdownMenu>
+
+                        <div className="flex-1 flex gap-2 items-end transition-all relative">
                             <Button
-                                type="submit"
-                                size="sm"
-                                disabled={!input.trim() || agentState !== 'idle'}
-                                className="h-9 rounded-xl px-4 bg-indigo-600 hover:bg-indigo-500 text-white shadow-md shadow-indigo-900/10 dark:shadow-indigo-900/30 transition-all font-medium"
+                                type="button"
+                                variant="outline"
+                                size="icon"
+                                className={`absolute left-2.5 bottom-1.5 h-8 w-8 rounded-full z-20 hidden sm:flex border-0 transition-colors ${focusedIds.length > 0 ? 'bg-indigo-50/80 hover:bg-indigo-100/80 dark:bg-indigo-900/40 dark:hover:bg-indigo-800/60 text-indigo-600 dark:text-indigo-400' : 'bg-slate-100 hover:bg-slate-200 dark:bg-slate-800 dark:hover:bg-slate-700 text-slate-500 dark:text-slate-400'}`}
+                                onClick={() => setFocusModalOpen(true)}
+                                title="Select specific documents to focus on"
                             >
-                                {agentState !== 'idle' ? <Loader2 className="w-4 h-4 animate-spin" /> : "Ask Agent"}
+                                {focusedIds.length > 0 ? <MessageSquare className="w-4 h-4" /> : <Plus className="w-4 h-4" />}
+                                {focusedIds.length > 0 && (
+                                    <span className="absolute -top-1 -right-1 flex h-3 w-3 items-center justify-center rounded-full bg-indigo-600 text-[8px] font-bold text-white shadow-sm ring-1 ring-background">
+                                        {focusedIds.length}
+                                    </span>
+                                )}
+                            </Button>
+                            <AutoResizeTextarea
+                                placeholder={focusedIds.length > 0 ? `Ask about ${focusedIds.length} focused document${focusedIds.length !== 1 ? 's' : ''}...` : (isTopDownMode ? "Ask agent using Top-Down search..." : "Ask agent to search your data...")}
+                                value={input}
+                                onChange={e => setInput(e.target.value)}
+                                onEnter={() => {
+                                    if (agentState === 'idle' && input.trim()) handleSend();
+                                }}
+                                disabled={agentState !== 'idle'}
+                                className={`border shadow-sm focus-visible:ring-1 bg-background sm:pl-12 px-4 py-3 min-h-[44px] rounded-3xl ${focusedIds.length > 0 ? 'border-indigo-400/50 ring-indigo-500/40 focus-visible:border-indigo-500 placeholder:text-indigo-500/50 dark:placeholder:text-indigo-400/50 font-medium' : 'border-indigo-200/50 focus-visible:ring-indigo-500 dark:border-indigo-800/50 dark:focus-visible:ring-indigo-400'} w-full transition-all`}
+                            />
+                            <Button
+                                onClick={handleSend}
+                                disabled={agentState !== 'idle' || !input.trim()}
+                                size="icon"
+                                className={`rounded-full shadow-sm shrink-0 h-[44px] w-[44px] transition-colors ${focusedIds.length > 0 ? 'bg-indigo-600 hover:bg-indigo-700 text-white' : 'bg-indigo-600 hover:bg-indigo-700 dark:bg-indigo-500 dark:hover:bg-indigo-400 text-white dark:text-indigo-950'}`}
+                            >
+                                {agentState !== 'idle' ? <Loader2 className="w-5 h-5 animate-spin" /> : <ArrowUp className="w-5 h-5" />}
                             </Button>
                         </div>
-                    </form>
+                    </div>
+
                     <div className="text-center">
                         <p className="text-[10px] text-indigo-500/60 dark:text-indigo-400/50">
                             The Agent will independently construct sub-queries and analyze multiple sources to solve your problem.
                         </p>
                     </div>
+
+                    <DocumentSelectionModal
+                        open={focusModalOpen}
+                        onOpenChange={setFocusModalOpen}
+                    />
                 </div>
             </div>
-        </div >
+        </div>
     );
 }

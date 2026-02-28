@@ -219,6 +219,54 @@ export const dbService = {
         return res.rows;
     },
 
+    async getTableInfo(tableId: string): Promise<any> {
+        const db = getDb();
+        const res = await db.query(
+            "SELECT id, table_name, summary, notes, schema_json, page_number FROM pdf_tables WHERE id = $1",
+            [tableId]
+        );
+        return res.rows[0] || null;
+    },
+
+    async getNearbyChunks(chunkId: string, direction: 'up' | 'down' | 'both', count: number): Promise<any[]> {
+        const db = getDb();
+
+        // First get the chunk's table_id and index
+        const chunkRes = await db.query("SELECT pdf_table_id, chunk_index FROM chunks WHERE id = $1", [chunkId]);
+        if (chunkRes.rows.length === 0) return [];
+
+        const { pdf_table_id, chunk_index } = chunkRes.rows[0] as any;
+
+        let query = "";
+        let params: any[] = [];
+
+        if (direction === 'up') {
+            query = "SELECT * FROM chunks WHERE pdf_table_id = $1 AND chunk_index < $2 ORDER BY chunk_index DESC LIMIT $3";
+            params = [pdf_table_id, chunk_index, count];
+        } else if (direction === 'down') {
+            query = "SELECT * FROM chunks WHERE pdf_table_id = $1 AND chunk_index > $2 ORDER BY chunk_index ASC LIMIT $3";
+            params = [pdf_table_id, chunk_index, count];
+        } else {
+            // Find both
+            query = `
+                (SELECT * FROM chunks WHERE pdf_table_id = $1 AND chunk_index < $2 ORDER BY chunk_index DESC LIMIT $3)
+                UNION ALL
+                (SELECT * FROM chunks WHERE pdf_table_id = $1 AND chunk_index > $2 ORDER BY chunk_index ASC LIMIT $3)
+                ORDER BY chunk_index ASC
+            `;
+            params = [pdf_table_id, chunk_index, count];
+        }
+
+        const res = await db.query(query, params);
+
+        // If direction is 'up', we got them in DESC order for the limit, so reverse them back to natural order
+        if (direction === 'up') {
+            return res.rows.reverse();
+        }
+
+        return res.rows;
+    },
+
     async getAllChunks(docId: string): Promise<any[]> {
         const db = getDb();
         const res = await db.query(
@@ -322,6 +370,7 @@ export const dbService = {
             SELECT 
                 c.id, 
                 c.document_id, 
+                c.pdf_table_id,
                 c.page_number, 
                 c.data, 
                 c.text_summary,
@@ -362,6 +411,7 @@ export const dbService = {
             SELECT
                 c.id,
                 c.document_id,
+                c.pdf_table_id,
                 c.page_number,
                 c.data,
                 c.text_summary,
@@ -430,6 +480,7 @@ export const dbService = {
             SELECT 
                 c.id, 
                 c.document_id, 
+                c.pdf_table_id,
                 c.page_number, 
                 c.data, 
                 c.text_summary,

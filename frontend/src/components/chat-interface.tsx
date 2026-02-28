@@ -1,14 +1,15 @@
 
 import { useState, useRef, useEffect } from 'react'
 import { Button } from "@/components/ui/button"
-import { Input } from "@/components/ui/input"
-import { Send, Loader2, ChevronDown, FileText, Plus, XCircle, MessageSquare, BookOpen, ChevronRight, Search, X } from "lucide-react"
+import { AutoResizeTextarea } from "@/components/ui/auto-resize-textarea"
+import { Loader2, ChevronDown, FileText, Plus, XCircle, MessageSquare, BookOpen, ChevronRight, Search, X, ArrowUp } from "lucide-react"
 import { apiService } from "@/services/api-service"
 import { dbService } from "@/services/db-service"
 import { DocumentViewerModal } from "./document-viewer-modal"
 import ReactMarkdown from 'react-markdown'
 import remarkGfm from 'remark-gfm'
 import { useLocation, useSearch } from "wouter"
+import { DocumentSelectionModal } from "./document-selection-modal"
 import {
     DropdownMenu,
     DropdownMenuContent,
@@ -17,13 +18,14 @@ import {
     DropdownMenuSeparator,
     DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu"
-import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from "@/components/ui/dialog"
-import { Checkbox } from "@/components/ui/checkbox"
+
+
 import { useExtractionStore } from '@/store/extraction-store'
 
 interface SourceChunk {
     id: string;
     document_id: string;
+    pdf_table_id?: string;
     filename: string;
     page_number: number;
     table_name: string;
@@ -163,7 +165,7 @@ export default function ChatInterface() {
     const [location, setLocation] = useLocation();
     const searchString = useSearch();
 
-    const availableDocs = Object.values(jobs).filter(j => j.status === 'completed' || j.status === 'paused');
+
 
     // Sync FROM url TO state
     useEffect(() => {
@@ -265,7 +267,22 @@ export default function ChatInterface() {
     };
 
     return (
-        <div className="flex flex-col h-full bg-background relative overflow-hidden">
+        <div className="flex flex-col h-full bg-slate-50 dark:bg-slate-950 text-slate-900 dark:text-slate-100 relative overflow-hidden">
+            {/* Ambient Background Gradient for Premium feel */}
+            <div className="absolute inset-0 bg-gradient-to-b from-blue-50/50 dark:from-blue-950/20 via-slate-50 dark:via-slate-950 to-indigo-50/50 dark:to-indigo-950/10 pointer-events-none" />
+
+            {/* Header Area */}
+            <div className="px-5 py-3 border-b border-blue-100 dark:border-blue-500/20 bg-white/80 dark:bg-slate-950/80 backdrop-blur-md flex items-center justify-between z-10 sticky top-0">
+                <div className="flex items-center gap-2.5">
+                    <div className="bg-blue-100 dark:bg-blue-500/20 p-1.5 rounded-lg border border-blue-200 dark:border-blue-500/30 shadow-[0_0_15px_rgba(59,130,246,0.1)] dark:shadow-[0_0_15px_rgba(59,130,246,0.2)]">
+                        <MessageSquare className="w-4 h-4 text-blue-600 dark:text-blue-400" />
+                    </div>
+                    <div>
+                        <h2 className="text-sm font-semibold text-blue-900 dark:text-blue-100 tracking-wide">Data Assistant Chat</h2>
+                        <p className="text-[10px] text-blue-600/80 dark:text-blue-400/80">Context-Aware Interrogation Mode</p>
+                    </div>
+                </div>
+            </div>
             <div className="flex-1 min-h-0 overflow-y-auto p-4" ref={scrollRef}>
                 <div className="space-y-6 max-w-3xl mx-auto pb-32">
                     {messages.map((m, i) => (
@@ -286,25 +303,25 @@ export default function ChatInterface() {
                                     ) : (
                                         <p className="whitespace-pre-wrap leading-relaxed">{m.content}</p>
                                     )}
+
+                                    {m.error && (
+                                        <div className="text-xs text-destructive bg-destructive/10 p-3 rounded-md border border-destructive/20 mt-1">
+                                            <strong>Error:</strong> {m.error}
+                                        </div>
+                                    )}
+
+                                    {m.sources && m.used_chunk_ids && m.used_chunk_ids.length > 0 && (
+                                        <div className="flex flex-col gap-1.5 mt-1 border-l-2 pl-3 border-muted-foreground/30">
+                                            <CitationGroup
+                                                sources={m.used_chunk_ids.map(id => m.sources?.find(s => s.id === id)).filter((s): s is SourceChunk => !!s)}
+                                            />
+                                        </div>
+                                    )}
+
+                                    {m.sources && m.sources.length > 0 && (
+                                        <SourceDropdown sources={m.sources} />
+                                    )}
                                 </div>
-
-                                {m.error && (
-                                    <div className="text-xs text-destructive bg-destructive/10 p-3 rounded-md border border-destructive/20 mt-1">
-                                        <strong>Error:</strong> {m.error}
-                                    </div>
-                                )}
-
-                                {m.sources && m.used_chunk_ids && m.used_chunk_ids.length > 0 && (
-                                    <div className="flex flex-col gap-1.5 mt-1 border-l-2 pl-3 border-muted-foreground/30">
-                                        <CitationGroup
-                                            sources={m.used_chunk_ids.map(id => m.sources?.find(s => s.id === id)).filter((s): s is SourceChunk => !!s)}
-                                        />
-                                    </div>
-                                )}
-
-                                {m.sources && m.sources.length > 0 && (
-                                    <SourceDropdown sources={m.sources} />
-                                )}
                             </div>
                         </div>
                     ))}
@@ -413,92 +430,50 @@ export default function ChatInterface() {
                             </DropdownMenuContent>
                         </DropdownMenu>
 
-                        <div className={`flex-1 flex gap-2 shadow-sm rounded-full bg-background border p-1 transition-all ${focusedIds.length > 0 ? 'border-blue-400/50 ring-2 ring-blue-500/20 shadow-[0_0_15px_rgba(59,130,246,0.1)] focus-within:ring-blue-500/40 focus-within:border-blue-500' : 'border-primary/20 focus-within:ring-1 focus-within:ring-primary'}`}>
-                            <Input
-                                placeholder={focusedIds.length > 0 ? `Ask about ${focusedIds.length} focused document${focusedIds.length !== 1 ? 's' : ''}...` : (isTopDownMode ? "Ask using Top-Down search..." : "Ask about your data...")}
-                                value={input}
-                                onChange={e => setInput(e.target.value)}
-                                onKeyDown={e => e.key === 'Enter' && handleSend()}
-                                disabled={isLoading}
-                                className={`border-0 focus-visible:ring-0 focus-visible:ring-offset-0 bg-transparent px-4 rounded-full ${focusedIds.length > 0 ? 'placeholder:text-blue-500/50 dark:placeholder:text-blue-400/50 font-medium' : ''}`}
-                            />
+                        <div className={`flex items-end gap-2 transition-all`}>
+                            <div className="relative flex-1">
+                                <Button
+                                    type="button"
+                                    variant="outline"
+                                    size="icon"
+                                    className={`absolute left-2.5 bottom-1.5 h-8 w-8 rounded-full z-10 hidden sm:flex border-0 transition-colors ${focusedIds.length > 0 ? 'bg-blue-50/80 hover:bg-blue-100/80 dark:bg-blue-900/40 dark:hover:bg-blue-800/60 text-blue-600 dark:text-blue-400' : 'bg-muted/50 hover:bg-muted text-muted-foreground'}`}
+                                    onClick={() => setFocusModalOpen(true)}
+                                    title="Select specific documents to focus on"
+                                >
+                                    {focusedIds.length > 0 ? <MessageSquare className="w-4 h-4" /> : <Plus className="w-4 h-4" />}
+                                    {focusedIds.length > 0 && (
+                                        <span className="absolute -top-1 -right-1 flex h-3 w-3 items-center justify-center rounded-full bg-blue-600 text-[8px] font-bold text-white shadow-sm ring-1 ring-background">
+                                            {focusedIds.length}
+                                        </span>
+                                    )}
+                                </Button>
+                                <AutoResizeTextarea
+                                    placeholder={focusedIds.length > 0 ? `Ask about ${focusedIds.length} focused document${focusedIds.length !== 1 ? 's' : ''}...` : (isTopDownMode ? "Ask using Top-Down search..." : "Ask about your data...")}
+                                    value={input}
+                                    onChange={e => setInput(e.target.value)}
+                                    onEnter={() => {
+                                        if (!isLoading && input.trim()) handleSend();
+                                    }}
+                                    disabled={isLoading}
+                                    className={`border shadow-sm focus-visible:ring-1 bg-background sm:pl-12 px-4 py-3 min-h-[44px] rounded-3xl ${focusedIds.length > 0 ? 'border-blue-400/50 ring-blue-500/40 focus-visible:border-blue-500 placeholder:text-blue-500/50 dark:placeholder:text-blue-400/50 font-medium' : 'border-primary/20 focus-visible:ring-primary'} w-full transition-all`}
+                                />
+                            </div>
                             <Button
                                 onClick={handleSend}
                                 disabled={isLoading || !input.trim()}
-                                className={`rounded-full shadow-sm px-6 h-9 transition-colors ${focusedIds.length > 0 ? 'bg-blue-600 hover:bg-blue-700 text-white' : ''}`}
+                                size="icon"
+                                className={`rounded-full shadow-sm shrink-0 h-[44px] w-[44px] transition-colors ${focusedIds.length > 0 ? 'bg-blue-600 hover:bg-blue-700 text-white' : ''}`}
                             >
-                                <Send className="w-4 h-4 mr-2" />
-                                Send
+                                <ArrowUp className="w-5 h-5" />
                             </Button>
                         </div>
                     </div>
                 </div>
 
-                {/* Document Selection Modal */}
-                <Dialog open={focusModalOpen} onOpenChange={setFocusModalOpen}>
-                    <DialogContent className="sm:max-w-[425px]">
-                        <DialogHeader>
-                            <DialogTitle className="flex items-center gap-2">
-                                <MessageSquare className="w-5 h-5 text-blue-500" />
-                                Focus Chat on Documents
-                            </DialogTitle>
-                            <DialogDescription>
-                                Select the PDFs you want the AI to restrict its search to.
-                            </DialogDescription>
-                        </DialogHeader>
-
-                        <div className="py-2 flex flex-col gap-3 max-h-[300px] overflow-y-auto pr-2">
-                            {availableDocs.length === 0 ? (
-                                <div className="text-sm text-muted-foreground text-center py-4 border rounded-md">
-                                    No processed documents available.
-                                </div>
-                            ) : (
-                                availableDocs.map(doc => {
-                                    const isChecked = focusedIds.includes(doc.documentId);
-                                    return (
-                                        <div
-                                            key={doc.documentId}
-                                            className={`flex items-start space-x-3 space-y-0 rounded-md border p-3 hover:bg-muted/50 cursor-pointer transition-colors ${isChecked ? 'bg-blue-50/50 border-blue-200' : ''}`}
-                                            onClick={() => {
-                                                if (isChecked) {
-                                                    setFocusedIds(focusedIds.filter(id => id !== doc.documentId));
-                                                } else {
-                                                    setFocusedIds([...focusedIds, doc.documentId]);
-                                                }
-                                            }}
-                                        >
-                                            <Checkbox
-                                                checked={isChecked}
-                                                onCheckedChange={(c) => {
-                                                    if (c) {
-                                                        setFocusedIds([...focusedIds, doc.documentId]);
-                                                    } else {
-                                                        setFocusedIds(focusedIds.filter(id => id !== doc.documentId));
-                                                    }
-                                                }}
-                                                className="mt-0.5"
-                                            />
-                                            <div className="space-y-1 leading-none flex-1 overflow-hidden">
-                                                <p className={`text-sm font-medium leading-none truncate ${isChecked ? 'text-blue-700' : ''}`}>
-                                                    {doc.filename}
-                                                </p>
-                                                <p className="text-xs text-muted-foreground">
-                                                    {doc.totalPages} pages
-                                                </p>
-                                            </div>
-                                        </div>
-                                    );
-                                })
-                            )}
-                        </div>
-
-                        <div className="flex justify-end pt-3 border-t">
-                            <Button onClick={() => setFocusModalOpen(false)}>
-                                Done
-                            </Button>
-                        </div>
-                    </DialogContent>
-                </Dialog>
+                <DocumentSelectionModal
+                    open={focusModalOpen}
+                    onOpenChange={setFocusModalOpen}
+                />
             </div>
         </div>
     );

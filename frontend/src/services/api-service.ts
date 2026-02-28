@@ -118,6 +118,30 @@ export const apiService = {
 
     // --- Orchestrator V2 modular pipeline ---
 
+    async orchestratorController(
+        userQuery: string,
+        chatHistory?: any[],
+        accumulator?: string,
+        searchCount?: number,
+        timeElapsedMs?: number,
+        collectedChunksSummary?: string
+    ): Promise<{ action: string; action_input: any }> {
+        const res = await fetch(`${API_URL}/orchestrator/controller`, {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({
+                user_query: userQuery,
+                chat_history: chatHistory,
+                accumulator: accumulator || "",
+                search_count: searchCount || 0,
+                time_elapsed_ms: timeElapsedMs || 0,
+                collected_chunks_summary: collectedChunksSummary || ""
+            }),
+        });
+        if (!res.ok) throw new Error("Orchestrator controller failed");
+        return await res.json();
+    },
+
     async orchestratorClassify(userQuery: string, chatHistory?: any[]): Promise<{
         intent: string;
         sub_queries: string[];

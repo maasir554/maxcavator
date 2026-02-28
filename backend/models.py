@@ -107,3 +107,15 @@ class OrchestratorV2SynthesizeResponse(BaseModel):
     response: str
     used_source_ids: List[str] = []
 
+class OrchestratorControllerRequest(BaseModel):
+    user_query: str
+    chat_history: Optional[List[Dict[str, str]]] = None
+    accumulator: str = ""
+    search_count: int = 0
+    time_elapsed_ms: int = 0
+    collected_chunks_summary: str = ""
+
+class OrchestratorControllerResponse(BaseModel):
+    action: str
+    action_input: Any
+
